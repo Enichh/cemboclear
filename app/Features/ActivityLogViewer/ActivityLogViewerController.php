@@ -6,7 +6,6 @@ namespace App\Features\ActivityLogViewer;
 use App\Core\Database;
 use App\Core\Response;
 use App\Core\Auth;
-use App\Core\Logger;
 
 class ActivityLogViewerController
 {
@@ -37,6 +36,11 @@ class ActivityLogViewerController
              LIMIT ? OFFSET ?',
             [$limit, $offset]
         )->fetchAll();
+
+        foreach ($logs as &$log) {
+            $log['id'] = (int)$log['id'];
+            $log['staff_id'] = $log['staff_id'] !== null ? (int)$log['staff_id'] : null;
+        }
 
         Response::json([
             'data'  => $logs,

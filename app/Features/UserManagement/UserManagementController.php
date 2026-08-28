@@ -29,6 +29,11 @@ class UserManagementController
              ORDER BY last_name, first_name'
         )->fetchAll();
 
+        foreach ($staff as &$s) {
+            $s['id'] = (int)$s['id'];
+            $s['is_verified'] = (int)$s['is_verified'];
+        }
+
         Response::json(['data' => $staff]);
     }
 
@@ -148,6 +153,11 @@ class UserManagementController
         }
 
         $staffId = (int)$id;
+        $existing = $this->db->query('SELECT id FROM staff WHERE id = ?', [$staffId])->fetch();
+        if (!$existing) {
+            Response::notFound('Staff not found');
+        }
+
         $this->db->execute(
             'UPDATE staff SET status = ? WHERE id = ?',
             [$status, $staffId]

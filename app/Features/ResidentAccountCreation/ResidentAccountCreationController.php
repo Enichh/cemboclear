@@ -28,10 +28,14 @@ class ResidentAccountCreationController
             }
         }
 
+        if (!empty($input['gender']) && !in_array($input['gender'], ['male', 'female', 'other'], true)) {
+            Response::error('Gender must be "male", "female", or "other".', 422);
+        }
+
         $email = trim($input['email']);
         $password = $input['password'];
 
-        // Check if email already exists
+        // Check if email already exists across both tables
         $existing = $this->db->query(
             'SELECT id FROM staff WHERE email = ? UNION SELECT id FROM residents WHERE email = ?',
             [$email, $email]
@@ -76,6 +80,10 @@ class ResidentAccountCreationController
                  JOIN agencies a ON a.id = r.agency_id
                  ORDER BY r.created_at DESC'
             )->fetchAll();
+            foreach ($requests as &$req) {
+                $req['id'] = (int)$req['id'];
+                $req['resident_id'] = (int)$req['resident_id'];
+            }
         } else {
             $requests = $this->db->query(
                 'SELECT r.id, r.ticket_id, r.subject, r.status, r.created_at,
@@ -86,6 +94,9 @@ class ResidentAccountCreationController
                  ORDER BY r.created_at DESC',
                 [Auth::id()]
             )->fetchAll();
+            foreach ($requests as &$req) {
+                $req['id'] = (int)$req['id'];
+            }
         }
 
         Response::json(['data' => $requests]);

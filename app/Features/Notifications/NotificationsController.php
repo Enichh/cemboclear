@@ -42,6 +42,11 @@ class NotificationsController
             )->fetchAll();
         }
 
+        foreach ($notifications as &$n) {
+            $n['id'] = (int)$n['id'];
+            $n['is_read'] = (int)$n['is_read'];
+        }
+
         Response::json(['data' => $notifications]);
     }
 
@@ -50,9 +55,15 @@ class NotificationsController
     {
         Auth::requireRole();
 
+        $notifId = (int)$id;
+        $existing = $this->db->query('SELECT id FROM notifications WHERE id = ?', [$notifId])->fetch();
+        if (!$existing) {
+            Response::notFound('Notification not found');
+        }
+
         $this->db->execute(
             'UPDATE notifications SET is_read = 1 WHERE id = ?',
-            [(int)$id]
+            [$notifId]
         );
 
         Response::json(['message' => 'Marked as read']);

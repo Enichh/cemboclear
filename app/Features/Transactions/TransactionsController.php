@@ -29,6 +29,13 @@ class TransactionsController
                  JOIN residents r ON r.id = t.resident_id
                  ORDER BY t.transacted_at DESC'
             )->fetchAll();
+            foreach ($transactions as &$t) {
+                $t['id'] = (int)$t['id'];
+                $t['resident_id'] = (int)$t['resident_id'];
+                if (isset($t['amount'])) {
+                    $t['amount'] = (float)$t['amount'];
+                }
+            }
         } else {
             $transactions = $this->db->query(
                 'SELECT id, description, amount, transacted_at
@@ -36,6 +43,12 @@ class TransactionsController
                  ORDER BY transacted_at DESC',
                 [Auth::id()]
             )->fetchAll();
+            foreach ($transactions as &$t) {
+                $t['id'] = (int)$t['id'];
+                if (isset($t['amount'])) {
+                    $t['amount'] = (float)$t['amount'];
+                }
+            }
         }
 
         Response::json(['data' => $transactions]);
@@ -62,6 +75,12 @@ class TransactionsController
         // Residents can only view their own
         if (Auth::type() === 'resident' && (int)$transaction['resident_id'] !== Auth::id()) {
             Response::forbidden();
+        }
+
+        $transaction['id'] = (int)$transaction['id'];
+        $transaction['resident_id'] = (int)$transaction['resident_id'];
+        if (isset($transaction['amount'])) {
+            $transaction['amount'] = (float)$transaction['amount'];
         }
 
         Response::json($transaction);

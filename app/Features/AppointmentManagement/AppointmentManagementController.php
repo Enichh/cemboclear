@@ -29,6 +29,10 @@ class AppointmentManagementController
                  JOIN residents r ON r.id = a.resident_id
                  ORDER BY a.appt_date DESC, a.time_slot'
             )->fetchAll();
+            foreach ($appointments as &$appt) {
+                $appt['id'] = (int)$appt['id'];
+                $appt['resident_id'] = (int)$appt['resident_id'];
+            }
         } else {
             $appointments = $this->db->query(
                 'SELECT id, appt_date, time_slot, status, created_at
@@ -36,6 +40,9 @@ class AppointmentManagementController
                  ORDER BY appt_date DESC, time_slot',
                 [Auth::id()]
             )->fetchAll();
+            foreach ($appointments as &$appt) {
+                $appt['id'] = (int)$appt['id'];
+            }
         }
 
         Response::json(['data' => $appointments]);
@@ -84,6 +91,10 @@ class AppointmentManagementController
              ORDER BY appt_date DESC',
             [(int)$id]
         )->fetchAll();
+
+        foreach ($appointments as &$appt) {
+            $appt['id'] = (int)$appt['id'];
+        }
 
         Response::json(['data' => $appointments]);
     }

@@ -32,6 +32,10 @@ class CertificateGenerationController
                  JOIN certificate_purposes p ON p.id = c.purpose_id
                  ORDER BY c.applied_at DESC'
             )->fetchAll();
+            foreach ($certs as &$c) {
+                $c['id'] = (int)$c['id'];
+                $c['resident_id'] = (int)$c['resident_id'];
+            }
         } else {
             $certs = $this->db->query(
                 'SELECT c.id, c.status, c.applied_at, p.name as purpose
@@ -41,6 +45,9 @@ class CertificateGenerationController
                  ORDER BY c.applied_at DESC',
                 [Auth::id()]
             )->fetchAll();
+            foreach ($certs as &$c) {
+                $c['id'] = (int)$c['id'];
+            }
         }
 
         Response::json(['data' => $certs]);
@@ -54,6 +61,10 @@ class CertificateGenerationController
         $purposes = $this->db->query(
             'SELECT id, name FROM certificate_purposes ORDER BY name'
         )->fetchAll();
+
+        foreach ($purposes as &$p) {
+            $p['id'] = (int)$p['id'];
+        }
 
         Response::json(['data' => $purposes]);
     }
@@ -93,13 +104,19 @@ class CertificateGenerationController
     {
         Auth::requireRole('staff');
 
+        $certId = (int)$id;
+        $existing = $this->db->query('SELECT id FROM certificate_applications WHERE id = ?', [$certId])->fetch();
+        if (!$existing) {
+            Response::notFound('Certificate application not found');
+        }
+
         $this->db->execute(
             "UPDATE certificate_applications SET status = 'approved' WHERE id = ?",
-            [(int)$id]
+            [$certId]
         );
 
         (new Logger($this->db))->activity(
-            'Approved certificate #' . $id,
+            'Approved certificate #' . $certId,
             Auth::id()
         );
 
@@ -111,13 +128,19 @@ class CertificateGenerationController
     {
         Auth::requireRole('staff');
 
+        $certId = (int)$id;
+        $existing = $this->db->query('SELECT id FROM certificate_applications WHERE id = ?', [$certId])->fetch();
+        if (!$existing) {
+            Response::notFound('Certificate application not found');
+        }
+
         $this->db->execute(
             "UPDATE certificate_applications SET status = 'rejected' WHERE id = ?",
-            [(int)$id]
+            [$certId]
         );
 
         (new Logger($this->db))->activity(
-            'Rejected certificate #' . $id,
+            'Rejected certificate #' . $certId,
             Auth::id()
         );
 

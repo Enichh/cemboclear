@@ -36,6 +36,11 @@ use App\Core\Router;
 use App\Core\Response;
 use App\Core\Auth;
 
+// Global exception handler to prevent SQL error or stack trace leakage
+set_exception_handler(function (\Throwable $e): void {
+    Response::error('An internal error occurred.', 500);
+});
+
 // Start session
 Auth::start();
 
@@ -53,14 +58,15 @@ require dirname(__DIR__) . '/app/routes.php';
 $uri = $_SERVER['REQUEST_URI'] ?? '/';
 $path = parse_url($uri, PHP_URL_PATH) ?: '/';
 
-// The front controller is at public/api/index.php, so /api/X comes in as /api/X
-// Our routes are defined with /api prefix, so we match directly.
-
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
-// Dispatch
-$matched = $router->dispatch($method, $path);
+// Dispatch with try-catch boundary to sanitize uncaught exceptions
+try {
+    $matched = $router->dispatch($method, $path);
 
-if (!$matched) {
-    Response::notFound('Endpoint not found: ' . $method . ' ' . $path);
+    if (!$matched) {
+        Response::notFound('Endpoint not found: ' . $method . ' ' . $path);
+    }
+} catch (\Throwable $e) {
+    Response::error('An internal error occurred.', 500);
 }

@@ -21,7 +21,7 @@ class StaffAuthenticationController
     public function login(): void
     {
         $input = json_decode(file_get_contents('php://input'), true) ?? [];
-        $identifier = trim((string)($input['email'] ?? $input['phone'] ?? $input['emailOrPhone'] ?? ''));
+        $identifier = trim((string)($input['email'] ?? $input['phone'] ?? $input['identifier'] ?? $input['emailOrPhone'] ?? ''));
         $password = $input['password'] ?? '';
 
         if ($identifier === '' || $password === '') {
@@ -94,7 +94,7 @@ class StaffAuthenticationController
             Response::json([
                 'message' => 'Login successful',
                 'user' => [
-                    'id'        => $user['id'],
+                    'id'        => (int)$user['id'],
                     'email'     => $user['email'],
                     'name'      => $user['first_name'] . ' ' . $user['last_name'],
                     'position'  => $user['position'],
@@ -130,7 +130,7 @@ class StaffAuthenticationController
             Response::json([
                 'message' => 'Login successful',
                 'user' => [
-                    'id'    => $resident['id'],
+                    'id'    => (int)$resident['id'],
                     'email' => $resident['email'],
                     'name'  => $resident['first_name'] . ' ' . $resident['last_name'],
                     'type'  => 'resident',
@@ -144,6 +144,7 @@ class StaffAuthenticationController
     /** POST /api/logout */
     public function logout(): void
     {
+        Auth::requireRole('any');
         Auth::logout();
         Response::json(['message' => 'Logged out']);
     }
@@ -165,6 +166,7 @@ class StaffAuthenticationController
                 [$id]
             )->fetch();
             if (!$user) Response::notFound();
+            $user['id'] = (int)$user['id'];
             $user['type'] = 'staff';
             Response::json($user);
         }
@@ -177,6 +179,7 @@ class StaffAuthenticationController
                 [$id]
             )->fetch();
             if (!$user) Response::notFound();
+            $user['id'] = (int)$user['id'];
             $user['type'] = 'resident';
             Response::json($user);
         }

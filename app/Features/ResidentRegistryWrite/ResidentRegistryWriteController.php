@@ -31,6 +31,12 @@ class ResidentRegistryWriteController
             Response::notFound('Resident not found');
         }
 
+        if (array_key_exists('gender', $input) && $input['gender'] !== null) {
+            if (!in_array($input['gender'], ['male', 'female', 'other'], true)) {
+                Response::error('Gender must be "male", "female", or "other".', 422);
+            }
+        }
+
         $allowed = [
             'first_name', 'middle_name', 'last_name', 'suffix', 'phone',
             'gender', 'birthdate', 'civil_status', 'birth_place', 'address',
@@ -70,6 +76,11 @@ class ResidentRegistryWriteController
         Auth::requireRole('staff');
 
         $residentId = (int)$id;
+        $existing = $this->db->query('SELECT id FROM residents WHERE id = ?', [$residentId])->fetch();
+        if (!$existing) {
+            Response::notFound('Resident not found');
+        }
+
         $this->db->execute(
             "UPDATE residents SET is_verified = 1, registry_status = 'verified' WHERE id = ?",
             [$residentId]
@@ -96,6 +107,11 @@ class ResidentRegistryWriteController
         }
 
         $residentId = (int)$id;
+        $existing = $this->db->query('SELECT id FROM residents WHERE id = ?', [$residentId])->fetch();
+        if (!$existing) {
+            Response::notFound('Resident not found');
+        }
+
         $this->db->execute(
             'UPDATE residents SET account_status = ? WHERE id = ?',
             [$status, $residentId]

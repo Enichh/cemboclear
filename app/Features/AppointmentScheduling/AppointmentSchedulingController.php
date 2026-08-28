@@ -83,12 +83,13 @@ class AppointmentSchedulingController
                 [Auth::id(), $date, $timeSlot]
             );
 
+            $id = (int)$this->db->lastInsertId();
             $this->db->commit();
 
             Response::json([
-                'message' => 'Appointment booked',
-                'id'      => (int)$this->db->lastInsertId(),
-                'date'    => $date,
+                'message'   => 'Appointment booked',
+                'id'        => $id,
+                'date'      => $date,
                 'time_slot' => $timeSlot,
             ], 201);
 

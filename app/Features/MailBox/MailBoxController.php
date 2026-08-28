@@ -50,6 +50,11 @@ class MailBoxController
             )->fetchAll();
         }
 
+        foreach ($messages as &$msg) {
+            $msg['id'] = (int)$msg['id'];
+            $msg['is_read'] = (int)$msg['is_read'];
+        }
+
         Response::json(['data' => $messages]);
     }
 
@@ -64,8 +69,8 @@ class MailBoxController
 
         $recipientId = (int)($input['recipient_id'] ?? 0);
         $recipientType = $input['recipient_type'] ?? '';
-        $subject = $input['subject'] ?? '';
-        $body = $input['body'] ?? '';
+        $subject = trim((string)($input['subject'] ?? ''));
+        $body = trim((string)($input['body'] ?? ''));
 
         if ($recipientId <= 0 || !in_array($recipientType, ['staff', 'resident'], true)) {
             Response::error('Valid recipient_id and recipient_type are required.', 422);
@@ -93,9 +98,15 @@ class MailBoxController
     {
         Auth::requireRole();
 
+        $mailId = (int)$id;
+        $existing = $this->db->query('SELECT id FROM mail WHERE id = ?', [$mailId])->fetch();
+        if (!$existing) {
+            Response::notFound('Mail not found');
+        }
+
         $this->db->execute(
             'UPDATE mail SET is_read = 1 WHERE id = ?',
-            [(int)$id]
+            [$mailId]
         );
 
         Response::json(['message' => 'Marked as read']);

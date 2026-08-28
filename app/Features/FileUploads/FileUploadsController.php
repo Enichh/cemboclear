@@ -30,12 +30,20 @@ class FileUploadsController
         $requestId = !empty($_POST['request_id']) ? (int)$_POST['request_id'] : null;
         $residentId = !empty($_POST['resident_id']) ? (int)$_POST['resident_id'] : null;
 
+        if ($requestId === null && $residentId === null && Auth::type() === 'resident') {
+            $residentId = Auth::id();
+        }
+
+        if ($requestId === null && $residentId === null) {
+            Response::error('Either request_id or resident_id must be provided.', 422);
+        }
+
         $validKinds = ['signature', 'valid_id', 'supporting_document'];
         if (!in_array($kind, $validKinds, true)) {
             Response::error('Invalid attachment kind.', 422);
         }
 
-        // Validate file
+        // Validate file size
         $maxSize = config('upload.max_size', 5 * 1024 * 1024);
         if ($file['size'] > $maxSize) {
             Response::error('File too large. Max: 5MB.', 422);

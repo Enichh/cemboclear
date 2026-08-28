@@ -37,6 +37,10 @@ class ResidentRegistryReadController
             [$limit, $offset]
         )->fetchAll();
 
+        foreach ($residents as &$r) {
+            $r['id'] = (int)$r['id'];
+        }
+
         Response::json([
             'data'  => $residents,
             'total' => (int)$total,
@@ -63,6 +67,8 @@ class ResidentRegistryReadController
             Response::notFound('Resident not found');
         }
 
+        $resident['id'] = (int)$resident['id'];
+
         Response::json($resident);
     }
 
@@ -86,6 +92,10 @@ class ResidentRegistryReadController
             [$like, $like, $like, $like]
         )->fetchAll();
 
+        foreach ($residents as &$r) {
+            $r['id'] = (int)$r['id'];
+        }
+
         Response::json(['data' => $residents]);
     }
 
@@ -101,9 +111,14 @@ class ResidentRegistryReadController
         $pending = $this->db->query(
             "SELECT COUNT(*) as cnt FROM residents WHERE registry_status = 'pending'"
         )->fetch()['cnt'];
+
         $byGender = $this->db->query(
             'SELECT gender, COUNT(*) as cnt FROM residents GROUP BY gender'
         )->fetchAll();
+        foreach ($byGender as &$row) {
+            $row['cnt'] = (int)$row['cnt'];
+        }
+
         $byAge = $this->db->query(
             'SELECT
                 CASE
@@ -117,6 +132,9 @@ class ResidentRegistryReadController
              GROUP BY age_group
              ORDER BY FIELD(age_group, "Under 18", "18-30", "31-50", "51+")'
         )->fetchAll();
+        foreach ($byAge as &$row) {
+            $row['cnt'] = (int)$row['cnt'];
+        }
 
         $pendingRequests = $this->db->query(
             "SELECT COUNT(*) as cnt FROM requests WHERE status = 'pending_review'"
