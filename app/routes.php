@@ -42,7 +42,7 @@ $router->get('/api/certificate-purposes',           [App\Features\CertificateGen
 
 // ─── 5. Resident Account Creation ──────────────────────────────────────────
 $router->post('/api/signup',             [App\Features\ResidentAccountCreation\ResidentAccountCreationController::class, 'signup']);
-$router->get('/api/requests',            [App\Features\ResidentAccountCreation\ResidentAccountCreationController::class, 'myRequests']);
+$router->get('/api/requests',            [App\Features\ResidentAccountCreation\ResidentAccountCreationController::class, 'index']);
 $router->post('/api/requests',           [App\Features\ResidentAccountCreation\ResidentAccountCreationController::class, 'submitRequest']);
 $router->get('/api/attachments/{id}',    [App\Features\ResidentAccountCreation\ResidentAccountCreationController::class, 'downloadAttachment']);
 

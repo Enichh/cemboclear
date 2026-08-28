@@ -27,9 +27,11 @@ class MailBoxController
         if ($type === 'staff') {
             $messages = $this->db->query(
                 'SELECT m.id, m.subject, m.body, m.is_read, m.created_at,
-                        s.first_name as sender_first, s.last_name as sender_last
+                        COALESCE(s.first_name, r.first_name) as sender_first,
+                        COALESCE(s.last_name, r.last_name) as sender_last
                  FROM mail m
-                 JOIN staff s ON s.id = m.sender_staff_id
+                 LEFT JOIN staff s ON s.id = m.sender_staff_id
+                 LEFT JOIN residents r ON r.id = m.sender_resident_id
                  WHERE m.recipient_staff_id = ?
                  ORDER BY m.created_at DESC',
                 [$id]
@@ -37,9 +39,11 @@ class MailBoxController
         } else {
             $messages = $this->db->query(
                 'SELECT m.id, m.subject, m.body, m.is_read, m.created_at,
-                        r.first_name as sender_first, r.last_name as sender_last
+                        COALESCE(s.first_name, r.first_name) as sender_first,
+                        COALESCE(s.last_name, r.last_name) as sender_last
                  FROM mail m
-                 JOIN residents r ON r.id = m.sender_resident_id
+                 LEFT JOIN staff s ON s.id = m.sender_staff_id
+                 LEFT JOIN residents r ON r.id = m.sender_resident_id
                  WHERE m.recipient_resident_id = ?
                  ORDER BY m.created_at DESC',
                 [$id]

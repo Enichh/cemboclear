@@ -77,6 +77,26 @@ class ResidentAccountCreationController
         Response::json(['data' => $requests]);
     }
 
+    /** GET /api/requests — All requests (staff view with resident info) */
+    public function index(): void
+    {
+        Auth::requireRole('staff');
+
+        $requests = $this->db->query(
+            'SELECT r.id, r.ticket_id, r.subject, r.status, r.created_at,
+                    r.resident_id,
+                    CONCAT(r.first_name, " ", r.last_name) as resident_name,
+                    r.control_no,
+                    a.name as agency_name
+             FROM requests r
+             JOIN residents res ON res.id = r.resident_id
+             JOIN agencies a ON a.id = r.agency_id
+             ORDER BY r.created_at DESC'
+        )->fetchAll();
+
+        Response::json(['data' => $requests]);
+    }
+
     /** POST /api/requests — Submit a request/concern (resident) */
     public function submitRequest(): void
     {
