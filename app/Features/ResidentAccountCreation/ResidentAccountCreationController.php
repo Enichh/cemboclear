@@ -59,20 +59,34 @@ class ResidentAccountCreationController
         Response::json(['message' => 'Account created', 'id' => (int)$this->db->lastInsertId()], 201);
     }
 
-    /** GET /api/requests — Resident's own requests */
+    /** GET /api/requests — Role-aware: staff sees all, resident sees own */
     public function myRequests(): void
     {
-        Auth::requireRole('resident');
+        Auth::requireRole();
 
-        $requests = $this->db->query(
-            'SELECT r.id, r.ticket_id, r.subject, r.status, r.created_at,
-                    a.name as agency_name
-             FROM requests r
-             JOIN agencies a ON a.id = r.agency_id
-             WHERE r.resident_id = ?
-             ORDER BY r.created_at DESC',
-            [Auth::id()]
-        )->fetchAll();
+        if (Auth::type() === 'staff') {
+            $requests = $this->db->query(
+                'SELECT r.id, r.ticket_id, r.resident_id,
+                        CONCAT(res.first_name, " ", res.last_name) AS resident_name,
+                        res.control_no,
+                        a.name AS agency_name,
+                        r.subject, r.status, r.created_at
+                 FROM requests r
+                 JOIN residents res ON res.id = r.resident_id
+                 JOIN agencies a ON a.id = r.agency_id
+                 ORDER BY r.created_at DESC'
+            )->fetchAll();
+        } else {
+            $requests = $this->db->query(
+                'SELECT r.id, r.ticket_id, r.subject, r.status, r.created_at,
+                        a.name as agency_name
+                 FROM requests r
+                 JOIN agencies a ON a.id = r.agency_id
+                 WHERE r.resident_id = ?
+                 ORDER BY r.created_at DESC',
+                [Auth::id()]
+            )->fetchAll();
+        }
 
         Response::json(['data' => $requests]);
     }
