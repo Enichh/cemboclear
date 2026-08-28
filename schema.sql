@@ -79,15 +79,15 @@ CREATE TABLE residents (
     -- login (CCLog-in.html)
     email         VARCHAR(255)  NOT NULL,
     password_hash VARCHAR(255)  NOT NULL,               -- password_hash() output only
-    phone         VARCHAR(30)   NULL,
+    phone         VARCHAR(30)   NOT NULL,
 
     -- identity (CCSignUp.html)
     first_name    VARCHAR(100)  NOT NULL,
     middle_name   VARCHAR(100)  NULL,                   -- "M.I Name"
     last_name     VARCHAR(100)  NOT NULL,
     suffix        VARCHAR(20)   NULL,
-    birthdate     DATE          NULL,
-    gender        ENUM('male','female','other') NULL,   -- signup offers "Other"
+    birthdate     DATE          NOT NULL,
+    gender        ENUM('male','female','other') NOT NULL,   -- signup offers "Other"
 
     -- registry (Resident Personal Information + RBI)
     civil_status  VARCHAR(40)   NULL,

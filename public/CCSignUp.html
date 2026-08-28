@@ -65,6 +65,19 @@
             margin-bottom: 25px;
         }
 
+        .error-banner {
+            display: none;
+            background-color: #fce8e6;
+            border: 1px solid #ea4335;
+            color: #c5221f;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-bottom: 20px;
+            text-align: left;
+            line-height: 1.5;
+        }
+
         /* Form Controls */
         .form-container {
             display: flex;
@@ -172,27 +185,29 @@
         <div class="page-title">Create Account</div>
         <div class="divider"></div>
 
-        <form id="signupForm">
+        <div id="signup-error" class="error-banner"></div>
+
+        <form id="signupForm" novalidate>
             <div class="form-container">
                 
                 <div class="form-group">
                     <label class="section-label">Name</label>
-                    <input type="text" class="input-field" placeholder="First Name" required>
-                    <input type="text" class="input-field" placeholder="M.I Name">
-                    <input type="text" class="input-field" placeholder="Last Name" required>
+                    <input type="text" name="first_name" class="input-field" placeholder="First Name" required>
+                    <input type="text" name="middle_name" class="input-field" placeholder="M.I Name">
+                    <input type="text" name="last_name" class="input-field" placeholder="Last Name" required>
                 </div>
 
                 <div class="form-group">
                     <label class="section-label">Birthdate</label>
                     <div class="select-wrapper date-wrapper">
-                        <input type="text" class="input-field" placeholder="mm/dd/yyyy" onfocus="(this.type='date')" onblur="if(!this.value)this.type='text'" required style="width: 150px;">
+                        <input type="text" name="birthdate" class="input-field" placeholder="mm/dd/yyyy" onfocus="(this.type='date')" onblur="if(!this.value)this.type='text'" required style="width: 150px;">
                     </div>
                 </div>
 
                 <div class="form-group">
                     <label class="section-label">Gender</label>
                     <div class="select-wrapper">
-                        <select class="input-field select-field" required style="width: 120px;">
+                        <select name="gender" class="input-field select-field" required style="width: 120px;">
                             <option value="" disabled selected hidden>Gender</option>
                             <option value="male">Male</option>
                             <option value="female">Female</option>
@@ -203,18 +218,18 @@
 
                 <div class="form-group">
                     <label class="section-label">Email</label>
-                    <input type="email" class="input-field" placeholder="Email" required>
+                    <input type="email" name="email" class="input-field" placeholder="Email" required>
                 </div>
 
                 <div class="form-group">
                     <label class="section-label">Phone No.</label>
-                    <input type="tel" class="input-field" value="+63 | " placeholder="Phone No." required>
+                    <input type="tel" name="phone" class="input-field" value="+63 | " placeholder="Phone No." required>
                 </div>
 
                 <div class="form-group">
                     <label class="section-label">Password</label>
-                    <input type="password" class="input-field half-width" placeholder="Password" required>
-                    <input type="password" class="input-field half-width" placeholder="Confirm Password" required>
+                    <input type="password" name="password" class="input-field half-width" placeholder="Password" required>
+                    <input type="password" name="password_confirm" class="input-field half-width" placeholder="Confirm Password" required>
                 </div>
 
             </div>
@@ -226,10 +241,44 @@
         </form>
     </div>
 
+    <script src="api-client.js"></script>
+    <script src="signup-validator.js"></script>
     <script>
-        document.getElementById('signupForm')?.addEventListener('submit', function (e) {
+        document.getElementById('signupForm')?.addEventListener('submit', async function (e) {
             e.preventDefault();
-            window.location.href = 'CCLog-in.html';
+            const errorBanner = document.getElementById('signup-error');
+            errorBanner.style.display = 'none';
+            errorBanner.innerHTML = '';
+
+            const form = e.target;
+            const payload = {};
+            const fields = ['first_name','middle_name','last_name','birthdate',
+                            'gender','email','phone','password','password_confirm'];
+            fields.forEach(function (name) {
+                const el = form.querySelector('[name="' + name + '"]');
+                if (el) payload[name] = el.value;
+            });
+
+            // Strip decorative "+63 | " prefix
+            if (typeof payload.phone === 'string') {
+                payload.phone = payload.phone.replace(/^\+63\s*\|?\s*/, '');
+            }
+
+            // SRP Client-Side Validation via SignupValidator
+            const validation = SignupValidator.validate(payload);
+            if (!validation.isValid) {
+                errorBanner.innerHTML = validation.errors.map(err => `<div>• ${err}</div>`).join('');
+                errorBanner.style.display = 'block';
+                return;
+            }
+
+            try {
+                await CemboClear.client().post('/signup', payload);
+                window.location.href = 'CCLog-in.html';
+            } catch (err) {
+                errorBanner.innerHTML = `<div>• ${err.message || 'Signup failed.'}</div>`;
+                errorBanner.style.display = 'block';
+            }
         });
     </script>
 

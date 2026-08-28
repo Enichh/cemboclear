@@ -49,10 +49,10 @@ class ResidentRegistryReadController
         ]);
     }
 
-    /** GET /api/residents/{id} — Show a single resident */
+    /** GET /api/residents/{id} — Show a single resident (staff only) */
     public function show(string $id): void
     {
-        Auth::requireRole();
+        Auth::requireRole('staff');
 
         $resident = $this->db->query(
             'SELECT id, email, first_name, middle_name, last_name, suffix, phone,

@@ -55,15 +55,24 @@ class NotificationsController
     {
         Auth::requireRole();
 
+        $userId = Auth::id();
+        $userType = Auth::type();
         $notifId = (int)$id;
-        $existing = $this->db->query('SELECT id FROM notifications WHERE id = ?', [$notifId])->fetch();
+
+        $ownerColumn = ($userType === 'staff') ? 'staff_id' : 'resident_id';
+
+        $existing = $this->db->query(
+            "SELECT id FROM notifications WHERE id = ? AND {$ownerColumn} = ?",
+            [$notifId, $userId]
+        )->fetch();
+
         if (!$existing) {
             Response::notFound('Notification not found');
         }
 
         $this->db->execute(
-            'UPDATE notifications SET is_read = 1 WHERE id = ?',
-            [$notifId]
+            "UPDATE notifications SET is_read = 1 WHERE id = ? AND {$ownerColumn} = ?",
+            [$notifId, $userId]
         );
 
         Response::json(['message' => 'Marked as read']);

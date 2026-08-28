@@ -17,10 +17,10 @@ class UserManagementController
         $this->db = new Database();
     }
 
-    /** GET /api/staff — List all staff accounts */
+    /** GET /api/staff — List all staff accounts (admin only) */
     public function index(): void
     {
-        Auth::requireRole('staff');
+        Auth::requireAdmin();
 
         $staff = $this->db->query(
             'SELECT id, email, first_name, middle_name, last_name, position, branch,
@@ -37,10 +37,10 @@ class UserManagementController
         Response::json(['data' => $staff]);
     }
 
-    /** POST /api/staff — Create a new staff account */
+    /** POST /api/staff — Create a new staff account (admin only) */
     public function create(): void
     {
-        Auth::requireRole('staff');
+        Auth::requireAdmin();
 
         $input = json_decode(file_get_contents('php://input'), true) ?? [];
 
@@ -49,6 +49,13 @@ class UserManagementController
             if (empty($input[$field])) {
                 Response::error("Field '{$field}' is required.", 422);
             }
+        }
+
+        // Password complexity (same policy as resident signup)
+        $password = (string)$input['password'];
+        $passwordErrors = self::validatePassword($password);
+        if (!empty($passwordErrors)) {
+            Response::error(implode(' ', $passwordErrors), 422);
         }
 
         $email = trim($input['email']);
@@ -67,7 +74,7 @@ class UserManagementController
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 $email,
-                password_hash($input['password'], PASSWORD_DEFAULT),
+                password_hash($password, PASSWORD_DEFAULT),
                 trim($input['first_name']),
                 $input['middle_name'] ?? null,
                 trim($input['last_name']),
@@ -89,10 +96,10 @@ class UserManagementController
         ], 201);
     }
 
-    /** PUT /api/staff/{id} — Update a staff account */
+    /** PUT /api/staff/{id} — Update a staff account (admin only) */
     public function update(string $id): void
     {
-        Auth::requireRole('staff');
+        Auth::requireAdmin();
 
         $input = json_decode(file_get_contents('php://input'), true) ?? [];
         $staffId = (int)$id;
@@ -140,10 +147,10 @@ class UserManagementController
         Response::json(['message' => 'Staff updated']);
     }
 
-    /** PUT /api/staff/{id}/status — Update staff status (active/inactive) */
+    /** PUT /api/staff/{id}/status — Update staff status (active/inactive) (admin only) */
     public function updateStatus(string $id): void
     {
-        Auth::requireRole('staff');
+        Auth::requireAdmin();
 
         $input = json_decode(file_get_contents('php://input'), true) ?? [];
         $status = $input['status'] ?? '';
@@ -169,5 +176,32 @@ class UserManagementController
         );
 
         Response::json(['message' => 'Status updated']);
+    }
+
+    /**
+     * Enforce the same password complexity policy as resident signup.
+     * Returns an array of error messages (empty if valid).
+     *
+     * @return array<string>
+     */
+    private static function validatePassword(string $password): array
+    {
+        $errors = [];
+        if (mb_strlen($password) < 8) {
+            $errors[] = 'Password must be at least 8 characters long.';
+        }
+        if (!preg_match('/[A-Z]/', $password)) {
+            $errors[] = 'Password must contain at least one uppercase letter.';
+        }
+        if (!preg_match('/[a-z]/', $password)) {
+            $errors[] = 'Password must contain at least one lowercase letter.';
+        }
+        if (!preg_match('/[0-9]/', $password)) {
+            $errors[] = 'Password must contain at least one number.';
+        }
+        if (!preg_match('/[\W_]/', $password)) {
+            $errors[] = 'Password must contain at least one special character.';
+        }
+        return $errors;
     }
 }

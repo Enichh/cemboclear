@@ -6,6 +6,8 @@ namespace App\Features\ResidentAccountCreation;
 use App\Core\Database;
 use App\Core\Response;
 use App\Core\Auth;
+use App\Core\RateLimiter;
+use App\Core\PhoneNormalizer;
 
 class ResidentAccountCreationController
 {
@@ -19,21 +21,20 @@ class ResidentAccountCreationController
     /** POST /api/signup — Resident self-registration */
     public function signup(): void
     {
+        RateLimiter::check('signup', 5, 300);
+
         $input = json_decode(file_get_contents('php://input'), true) ?? [];
 
-        $required = ['email', 'password', 'first_name', 'last_name'];
-        foreach ($required as $field) {
-            if (empty($input[$field])) {
-                Response::error("Field '{$field}' is required.", 422);
-            }
-        }
-
-        if (!empty($input['gender']) && !in_array($input['gender'], ['male', 'female', 'other'], true)) {
-            Response::error('Gender must be "male", "female", or "other".', 422);
+        // Strict Signup Validation via SignupValidator (SRP)
+        $errors = SignupValidator::validate($input);
+        if (!empty($errors)) {
+            Response::error(implode(' ', $errors), 422);
         }
 
         $email = trim($input['email']);
         $password = $input['password'];
+        $rawPhone = trim((string)($input['phone'] ?? ''));
+        $normalizedPhone = PhoneNormalizer::toNational($rawPhone);
 
         // Check if email already exists across both tables
         $existing = $this->db->query(
@@ -54,8 +55,8 @@ class ResidentAccountCreationController
                 $input['middle_name'] ?? null,
                 trim($input['last_name']),
                 $input['suffix'] ?? null,
-                $input['phone'] ?? null,
-                $input['gender'] ?? null,
+                $normalizedPhone,
+                strtolower(trim($input['gender'] ?? '')),
                 $input['birthdate'] ?? null,
             ]
         );
@@ -106,6 +107,7 @@ class ResidentAccountCreationController
     public function submitRequest(): void
     {
         Auth::requireRole('resident');
+        RateLimiter::check('submit_request', 10, 60);
 
         $input = json_decode(file_get_contents('php://input'), true) ?? [];
         $agencyId = (int)($input['agency_id'] ?? 0);
@@ -151,10 +153,23 @@ class ResidentAccountCreationController
     {
         Auth::requireRole();
 
-        $attachment = $this->db->query(
-            'SELECT file_name, file_path, kind FROM attachments WHERE id = ?',
-            [(int)$id]
-        )->fetch();
+        $attachmentId = (int)$id;
+
+        if (Auth::type() === 'staff') {
+            $attachment = $this->db->query(
+                'SELECT file_name, file_path, kind FROM attachments WHERE id = ?',
+                [$attachmentId]
+            )->fetch();
+        } else {
+            $userId = Auth::id();
+            $attachment = $this->db->query(
+                'SELECT a.file_name, a.file_path, a.kind
+                 FROM attachments a
+                 LEFT JOIN requests r ON a.request_id = r.id
+                 WHERE a.id = ? AND (a.resident_id = ? OR r.resident_id = ?)',
+                [$attachmentId, $userId, $userId]
+            )->fetch();
+        }
 
         if (!$attachment) {
             Response::notFound('Attachment not found');
@@ -165,8 +180,14 @@ class ResidentAccountCreationController
             Response::notFound('File not found on disk');
         }
 
+        // Sanitize filename to prevent header injection and traversal
+        $cleanFileName = preg_replace('/[\r\n"\\\\]/', '', basename($attachment['file_name']));
+        if ($cleanFileName === '') {
+            $cleanFileName = 'download';
+        }
+
         header('Content-Type: application/octet-stream');
-        header('Content-Disposition: attachment; filename="' . $attachment['file_name'] . '"');
+        header('Content-Disposition: attachment; filename="' . $cleanFileName . '"');
         header('Content-Length: ' . filesize($fullPath));
         readfile($fullPath);
         exit;

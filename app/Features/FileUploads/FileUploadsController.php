@@ -56,9 +56,23 @@ class FileUploadsController
             Response::error('File type not allowed: ' . $mimeType, 422);
         }
 
-        // Generate safe filename
-        $ext = pathinfo($file['name'], PATHINFO_EXTENSION) ?: 'bin';
-        $safeName = bin2hex(random_bytes(16)) . '.' . $ext;
+        // Sanitize client-supplied file name to remove illegal path/header characters
+        $rawOriginalName = basename((string)$file['name']);
+        $safeOriginalName = preg_replace('/[^\w\.\-]/', '_', $rawOriginalName);
+        if ($safeOriginalName === '') {
+            $safeOriginalName = 'upload';
+        }
+
+        // Determine extension safely
+        $extMap = [
+            'image/jpeg' => 'jpg',
+            'image/png'  => 'png',
+            'image/webp' => 'webp',
+            'application/pdf' => 'pdf',
+        ];
+        $safeExt = $extMap[$mimeType] ?? 'bin';
+
+        $safeName = bin2hex(random_bytes(16)) . '.' . $safeExt;
         $uploadDir = storage_path('uploads');
 
         if (!is_dir($uploadDir)) {
@@ -74,13 +88,13 @@ class FileUploadsController
         $this->db->execute(
             'INSERT INTO attachments (request_id, resident_id, kind, file_name, file_path)
              VALUES (?, ?, ?, ?, ?)',
-            [$requestId, $residentId, $kind, $file['name'], $safeName]
+            [$requestId, $residentId, $kind, $safeOriginalName, $safeName]
         );
 
         Response::json([
             'message'   => 'File uploaded',
             'id'        => (int)$this->db->lastInsertId(),
-            'file_name' => $file['name'],
+            'file_name' => $safeOriginalName,
             'kind'      => $kind,
         ], 201);
     }

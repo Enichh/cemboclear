@@ -13,12 +13,12 @@ declare(strict_types=1);
  */
 
 // Load helpers (global functions)
-require_once dirname(__DIR__) . '/app/Core/helpers.php';
+require_once dirname(__DIR__, 2) . '/app/Core/helpers.php';
 
 // Autoload PSR-4 classes from app/
 spl_autoload_register(function (string $class): void {
     $prefix = 'App\\';
-    $baseDir = dirname(__DIR__) . '/app/';
+    $baseDir = dirname(__DIR__, 2) . '/app/';
 
     if (strncmp($class, $prefix, strlen($prefix)) !== 0) {
         return;
@@ -35,11 +35,11 @@ spl_autoload_register(function (string $class): void {
 use App\Core\Router;
 use App\Core\Response;
 use App\Core\Auth;
+use App\Core\Csrf;
+use App\Core\ErrorHandler;
 
-// Global exception handler to prevent SQL error or stack trace leakage
-set_exception_handler(function (\Throwable $e): void {
-    Response::error('An internal error occurred.', 500);
-});
+// Register central error & exception handler to prevent leaking technical details
+ErrorHandler::register();
 
 // Start session
 Auth::start();
@@ -50,13 +50,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     Response::noContent();
 }
 
+// Validate CSRF token for mutating HTTP methods
+Csrf::check();
+
 // Load routes
 $router = new Router();
-require dirname(__DIR__) . '/app/routes.php';
+require dirname(__DIR__, 2) . '/app/routes.php';
 
 // Parse the URI (strip query string, get path relative to project root)
 $uri = $_SERVER['REQUEST_URI'] ?? '/';
 $path = parse_url($uri, PHP_URL_PATH) ?: '/';
+
+// Normalize the path so routes (defined with a leading /api) match regardless
+// of where the app is mounted. REQUEST_URI is absolute; SCRIPT_NAME is the URL
+// path to this front controller, so we strip everything up to public/.
+$scriptPath = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '');
+$base = rtrim(str_replace('\\', '/', dirname(dirname($scriptPath))), '/');
+if ($base !== '' && $base !== '/' && str_starts_with($path, $base . '/')) {
+    $path = substr($path, strlen($base));
+}
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
@@ -65,8 +77,8 @@ try {
     $matched = $router->dispatch($method, $path);
 
     if (!$matched) {
-        Response::notFound('Endpoint not found: ' . $method . ' ' . $path);
+        Response::notFound('The requested endpoint could not be found.');
     }
 } catch (\Throwable $e) {
-    Response::error('An internal error occurred.', 500);
+    ErrorHandler::handleException($e);
 }

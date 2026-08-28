@@ -16,10 +16,10 @@ class ActivityLogViewerController
         $this->db = new Database();
     }
 
-    /** GET /api/audit-logs — List audit log entries (staff only) */
+    /** GET /api/audit-logs — List audit log entries (admin only) */
     public function index(): void
     {
-        Auth::requireRole('staff');
+        Auth::requireAdmin();
 
         $page = max(1, (int)($_GET['page'] ?? 1));
         $limit = min(100, max(1, (int)($_GET['limit'] ?? 50)));

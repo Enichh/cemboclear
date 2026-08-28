@@ -12,7 +12,7 @@
 
 declare(strict_types=1);
 
-// ─── Bootstrap ───────────────────────────────────────────────────────────────
+// ─── Bootstrap ───────────────────────────────────────────────────────────
 $root = dirname(__DIR__);
 require_once $root . '/app/Core/helpers.php';
 
@@ -29,6 +29,11 @@ use App\Core\Database;
 use App\Core\Router;
 use App\Core\Response;
 use App\Core\Auth;
+use App\Core\RateLimiter;
+use App\Core\ErrorHandler;
+use App\Core\PhoneNormalizer;
+use App\Features\StaffAuthentication\LoginValidator;
+use App\Features\ResidentAccountCreation\SignupValidator;
 
 // Suppress session warnings in CLI (expected — sessions require a web server)
 set_error_handler(function (int $errno, string $errstr) {
@@ -38,7 +43,7 @@ set_error_handler(function (int $errno, string $errstr) {
     return false; // let other errors through
 });
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────
 $passed = 0;
 $failed = 0;
 $errors = [];
@@ -76,13 +81,10 @@ function assert_true(bool $value, string $msg = ''): void
     }
 }
 
-// ─── Suppress HTTP output during tests ───────────────────────────────────────
-// We test static methods; Response::json() calls exit, so we test the helpers
-// and non-exit paths instead.
-
+// ─── Suppress HTTP output during tests ───────────────────────────────────
 echo "\n=== CemboClear Test Baseline ===\n\n";
 
-// ─── 1. Helpers ──────────────────────────────────────────────────────────────
+// ─── 1. Helpers ──────────────────────────────────────────────────────────
 echo "--- Helpers ---\n";
 
 test('e() escapes HTML', function () {
@@ -119,7 +121,7 @@ test('generate_ticket_id() format', function () {
     assert_true(preg_match('/^#REQ-\d{4}-\d{4}$/', $id) === 1, "Got: {$id}");
 });
 
-// ─── 2. Router ───────────────────────────────────────────────────────────────
+// ─── 2. Router ───────────────────────────────────────────────────────────
 echo "\n--- Router ---\n";
 
 test('Router matches GET route', function () {
@@ -160,7 +162,7 @@ test('Router returns false for unmatched', function () {
     assert_eq(false, $result);
 });
 
-// ─── 3. Auth (session-based, unit testable) ──────────────────────────────────
+// ─── 3. Auth (session-based, unit testable) ───────────────────────────────
 echo "\n--- Auth ---\n";
 
 // Clear any session
@@ -181,19 +183,29 @@ test('Auth::type() returns null when not logged in', function () {
 });
 
 test('Auth::loginStaff sets session', function () {
-    Auth::loginStaff(1, 'Admin');
+    Auth::loginStaff(1, 'System Administrator');
     assert_true(Auth::check());
     assert_eq(1, Auth::id());
     assert_eq('staff', Auth::type());
-    assert_eq('Admin', Auth::role());
+    assert_eq('System Administrator', Auth::role());
+    assert_true(Auth::isAdmin());
+});
+
+test('Auth::isAdmin() returns false for regular staff', function () {
+    Auth::loginStaff(2, 'Barangay Staff');
+    assert_true(Auth::check());
+    assert_true(!Auth::isAdmin());
+});
+
+test('Auth::isAdmin() returns false for resident', function () {
+    Auth::loginResident(5);
+    assert_true(Auth::check());
+    assert_true(!Auth::isAdmin());
 });
 
 test('Auth::logout clears session', function () {
-    // In CLI, session_start() can't run after output — test via $_SESSION directly
     $_SESSION = ['user_id' => 1, 'user_type' => 'staff'];
     Auth::logout();
-    // logout() calls session_destroy(); in CLI without a real session,
-    // we verify the session superglobal is cleared
     assert_true(empty($_SESSION['user_id']));
 });
 
@@ -204,7 +216,7 @@ test('Auth::loginResident sets session', function () {
     assert_eq('resident', Auth::type());
 });
 
-// ─── 4. Database connection (optional — requires running MySQL) ──────────────
+// ─── 4. Database connection ──────────────────────────────────────────────
 echo "\n--- Database ---\n";
 
 $mysqlAvailable = false;
@@ -223,7 +235,7 @@ test('Database connects to MySQL', function () use (&$mysqlAvailable) {
     }
     $db = new Database();
     $result = $db->query('SELECT 1 as val')->fetch();
-    assert_eq('1', $result['val']);
+    assert_eq(1, (int)$result['val']);
 });
 
 test('Database query with parameters', function () use (&$mysqlAvailable) {
@@ -236,7 +248,7 @@ test('Database query with parameters', function () use (&$mysqlAvailable) {
     assert_eq('hello', $result['msg']);
 });
 
-// ─── 5. CSRF ─────────────────────────────────────────────────────────────────
+// ─── 5. CSRF ─────────────────────────────────────────────────────────────
 echo "\n--- CSRF ---\n";
 
 use App\Core\Csrf;
@@ -259,7 +271,80 @@ test('Csrf::validate() rejects null', function () {
     assert_true(!Csrf::validate(null));
 });
 
-// ─── Summary ─────────────────────────────────────────────────────────────────
+// ─── 6. Rate Limiter ─────────────────────────────────────────────────────
+echo "\n--- Rate Limiter ---\n";
+
+test('RateLimiter allows requests within maxAttempts', function () {
+    RateLimiter::check('unit_test_allowed', 2, 60);
+});
+
+// ─── 7. Central Error Handler ────────────────────────────────────────────
+echo "\n--- Central Error Handler ---\n";
+
+test('ErrorHandler registers error handlers successfully', function () {
+    ErrorHandler::register();
+    assert_true(true);
+});
+
+// ─── 8. Validation Services & Normalizers (SRP) ─────────────────────────
+echo "\n--- Validation & Normalization Services (SRP) ---\n";
+
+test('PhoneNormalizer normalizes various PH mobile formats', function () {
+    assert_eq('09171234567', PhoneNormalizer::toNational('+639171234567'));
+    assert_eq('09171234567', PhoneNormalizer::toNational('+63 | 917 123 4567'));
+    assert_eq('+639171234567', PhoneNormalizer::toE164('0917-123-4567'));
+    assert_true(PhoneNormalizer::isValid('09171234567'));
+    assert_true(!PhoneNormalizer::isValid('12345'));
+});
+
+test('PhoneNormalizer generates database query variations', function () {
+    $vars = PhoneNormalizer::getVariations('+63 | 917 123 4567');
+    assert_true(in_array('09171234567', $vars, true));
+    assert_true(in_array('+639171234567', $vars, true));
+    assert_true(in_array('9171234567', $vars, true));
+});
+
+test('LoginValidator validates valid email and password', function () {
+    $errs = LoginValidator::validate(['email' => 'user@example.com', 'password' => 'Pass123!']);
+    assert_true(empty($errs));
+});
+
+test('LoginValidator accepts valid phone login', function () {
+    $errs = LoginValidator::validate(['identifier' => '+63 | 917 123 4567', 'password' => 'Pass123!']);
+    assert_true(empty($errs));
+});
+
+test('LoginValidator rejects invalid identifier format', function () {
+    $errs = LoginValidator::validate(['email' => 'invalid-email-format', 'password' => 'Pass123!']);
+    assert_true(!empty($errs));
+});
+
+test('SignupValidator validates valid resident payload', function () {
+    $errs = SignupValidator::validate([
+        'first_name' => 'Juan',
+        'last_name' => 'Dela Cruz',
+        'email' => 'juan@example.com',
+        'phone' => '+63 | 917 123 4567',
+        'birthdate' => '1995-05-15',
+        'gender' => 'male',
+        'password' => 'StrongP@ss1'
+    ]);
+    assert_true(empty($errs));
+});
+
+test('SignupValidator rejects weak password', function () {
+    $errs = SignupValidator::validate([
+        'first_name' => 'Juan',
+        'last_name' => 'Dela Cruz',
+        'email' => 'juan@example.com',
+        'birthdate' => '1995-05-15',
+        'gender' => 'male',
+        'password' => 'weak'
+    ]);
+    assert_true(!empty($errs));
+});
+
+// ─── Summary ─────────────────────────────────────────────────────────────
 echo "\n=== Results: {$passed} passed, {$failed} failed ===\n";
 
 if ($failed > 0) {

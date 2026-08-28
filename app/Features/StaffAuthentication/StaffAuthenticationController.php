@@ -6,7 +6,10 @@ namespace App\Features\StaffAuthentication;
 use App\Core\Database;
 use App\Core\Response;
 use App\Core\Auth;
+use App\Core\Csrf;
 use App\Core\Logger;
+use App\Core\RateLimiter;
+use App\Core\PhoneNormalizer;
 
 class StaffAuthenticationController
 {
@@ -20,50 +23,22 @@ class StaffAuthenticationController
     /** POST /api/login */
     public function login(): void
     {
-        $input = json_decode(file_get_contents('php://input'), true) ?? [];
-        $identifier = trim((string)($input['email'] ?? $input['phone'] ?? $input['identifier'] ?? $input['emailOrPhone'] ?? ''));
-        $password = $input['password'] ?? '';
+        RateLimiter::check('login', 5, 60);
 
-        if ($identifier === '' || $password === '') {
-            Response::error('Email/Phone and password are required.', 422);
+        $input = json_decode(file_get_contents('php://input'), true) ?? [];
+        
+        // Strict Login Validation via LoginValidator (SRP)
+        $errors = LoginValidator::validate($input);
+        if (!empty($errors)) {
+            Response::error(implode(' ', $errors), 422);
         }
+
+        $identifier = trim((string)($input['email'] ?? $input['phone'] ?? $input['identifier'] ?? $input['emailOrPhone'] ?? ''));
+        $password = (string)($input['password'] ?? '');
 
         // Phone normalization logic
-        $isPhone = false;
-        $phoneVariations = [];
-        if (!str_contains($identifier, '@')) {
-            $cleaned = preg_replace('/[^\d+]/', '', $identifier);
-            $digits = preg_replace('/\D/', '', $cleaned);
-            if (strlen($digits) >= 9) {
-                $isPhone = true;
-                if (str_starts_with($digits, '63') && strlen($digits) > 10) {
-                    $base = substr($digits, 2);
-                } elseif (str_starts_with($digits, '0') && strlen($digits) > 9) {
-                    $base = substr($digits, 1);
-                } else {
-                    $base = $digits;
-                }
-
-                if (strlen($base) === 10) {
-                    $phoneVariations = [
-                        $identifier,
-                        $cleaned,
-                        $digits,
-                        '0' . $base,
-                        '+63' . $base,
-                        '63' . $base,
-                        $base
-                    ];
-                } else {
-                    $phoneVariations = [
-                        $identifier,
-                        $cleaned,
-                        $digits
-                    ];
-                }
-                $phoneVariations = array_unique(array_filter($phoneVariations));
-            }
-        }
+        $isPhone = PhoneNormalizer::isValid($identifier);
+        $phoneVariations = $isPhone ? PhoneNormalizer::getVariations($identifier) : [];
 
         // Try staff first, then residents
         if ($isPhone && !empty($phoneVariations)) {
@@ -82,25 +57,24 @@ class StaffAuthenticationController
         }
 
         if ($user) {
-            if ($user['status'] !== 'active') {
-                Response::error('Account is inactive.', 403);
+            if ($user['status'] === 'active' && password_verify($password, $user['password_hash'])) {
+                Auth::loginStaff((int)$user['id'], $user['position'] ?? '');
+                (new Logger($this->db))->activity('Staff login', (int)$user['id']);
+                Response::json([
+                    'message'    => 'Login successful',
+                    'csrf_token' => Csrf::token(),
+                    'user' => [
+                        'id'        => (int)$user['id'],
+                        'email'     => $user['email'],
+                        'name'      => $user['first_name'] . ' ' . $user['last_name'],
+                        'position'  => $user['position'],
+                        'type'      => 'staff',
+                    ],
+                ]);
             }
-            if (!password_verify($password, $user['password_hash'])) {
-                (new Logger($this->db))->log('Failed login attempt', 'unauthorized');
-                Response::error('Invalid credentials.', 401);
-            }
-            Auth::loginStaff((int)$user['id'], $user['position'] ?? '');
-            (new Logger($this->db))->activity('Staff login', (int)$user['id']);
-            Response::json([
-                'message' => 'Login successful',
-                'user' => [
-                    'id'        => (int)$user['id'],
-                    'email'     => $user['email'],
-                    'name'      => $user['first_name'] . ' ' . $user['last_name'],
-                    'position'  => $user['position'],
-                    'type'      => 'staff',
-                ],
-            ]);
+            // Generic failure to prevent account/status enumeration
+            (new Logger($this->db))->log('Failed login attempt', 'unauthorized');
+            Response::error('Invalid credentials.', 401);
         }
 
         // Try residents
@@ -120,22 +94,20 @@ class StaffAuthenticationController
         }
 
         if ($resident) {
-            if ($resident['account_status'] !== 'active') {
-                Response::error('Account is inactive.', 403);
+            if ($resident['account_status'] === 'active' && password_verify($password, $resident['password_hash'])) {
+                Auth::loginResident((int)$resident['id']);
+                Response::json([
+                    'message'    => 'Login successful',
+                    'csrf_token' => Csrf::token(),
+                    'user' => [
+                        'id'    => (int)$resident['id'],
+                        'email' => $resident['email'],
+                        'name'  => $resident['first_name'] . ' ' . $resident['last_name'],
+                        'type'  => 'resident',
+                    ],
+                ]);
             }
-            if (!password_verify($password, $resident['password_hash'])) {
-                Response::error('Invalid credentials.', 401);
-            }
-            Auth::loginResident((int)$resident['id']);
-            Response::json([
-                'message' => 'Login successful',
-                'user' => [
-                    'id'    => (int)$resident['id'],
-                    'email' => $resident['email'],
-                    'name'  => $resident['first_name'] . ' ' . $resident['last_name'],
-                    'type'  => 'resident',
-                ],
-            ]);
+            Response::error('Invalid credentials.', 401);
         }
 
         Response::error('Invalid credentials.', 401);
@@ -168,6 +140,7 @@ class StaffAuthenticationController
             if (!$user) Response::notFound();
             $user['id'] = (int)$user['id'];
             $user['type'] = 'staff';
+            $user['csrf_token'] = Csrf::token();
             Response::json($user);
         }
 
@@ -181,6 +154,7 @@ class StaffAuthenticationController
             if (!$user) Response::notFound();
             $user['id'] = (int)$user['id'];
             $user['type'] = 'resident';
+            $user['csrf_token'] = Csrf::token();
             Response::json($user);
         }
 

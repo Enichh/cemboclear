@@ -19,6 +19,26 @@ This document defines the exact HTTP surface the frontend expects. Match it prec
 - Requests with a body: `application/json` (raw JSON body, read via `php://input`).
 - **Exception:** `POST /api/upload` uses `multipart/form-data`.
 
+### CSRF protection (REQUIRED)
+All mutating requests (`POST`, `PUT`, `DELETE`, `PATCH`) are protected by a synchronizer CSRF token,
+**except** the session-establishing routes `POST /api/login` and `POST /api/signup` (they have no
+session/token yet). The backend enforces this in `Csrf::check()` before routing; a missing/mismatched
+token returns `403 { "error": true, "message": "CSRF token validation failed." }`.
+
+- **How the client obtains the token:** the backend returns it in the JSON field `csrf_token` on
+  `POST /api/login` (success) and `GET /api/me`. The client MUST persist it (e.g. `localStorage`)
+  and re-send it as the request header `X-CSRF-Token` on every subsequent mutating request.
+- **Accepted token locations (server checks in order):**
+  1. `X-CSRF-Token` header (also accepts `X-XSRF-Token`),
+  2. `$_POST['csrf_token']` / `$_POST['_csrf']` (form/multipart), or
+  3. JSON body field `csrf_token` / `_csrf`.
+  > Prefer the `X-CSRF-Token` header; the body fallbacks exist only for `multipart/form-data` flows
+  > that cannot set the header.
+- The frontend MUST call the API only through `public/api-client.js` (`CemboClear.client()`), which
+  handles the token automatically. Do **not** hand-write `fetch` calls that bypass it.
+- The token is stored in the session (`$_SESSION['csrf_token']`); it is single-session, not shared
+  across devices. When the session expires and `re-login` occurs, a fresh token is issued — update it.
+
 ### Response envelope
 Every response is JSON.
 
@@ -41,6 +61,7 @@ Every response is JSON.
 | 404 | Not found |
 | 409 | Conflict (duplicate email, already-booked slot, already cancelled) |
 | 422 | Validation error (missing/invalid field) |
+| 429 | Too many requests (rate-limited) |
 | 500 | Server error |
 
 ### Auth model
@@ -89,6 +110,7 @@ Every response is JSON.
 ```json
 {
   "message": "Login successful",
+  "csrf_token": "<64 hex chars>",
   "user": {
     "id": 1,
     "email": "juan@example.com",
@@ -98,10 +120,11 @@ Every response is JSON.
   }
 }
 ```
+  - `csrf_token` is REQUIRED by the frontend: persist it and send it as `X-CSRF-Token` on all later mutating calls.
 - **Errors:**
   - `422` missing identifier/password.
-  - `403` account inactive.
-  - `401` invalid credentials.
+  - `401` invalid credentials, inactive account, or unknown user — a single uniform message (no account/status enumeration).
+  - `429` too many attempts (rate-limited via `RateLimiter`; retry after `Retry-After`).
 
 #### `POST /api/logout`
 - **Auth:** any authenticated.
@@ -109,9 +132,9 @@ Every response is JSON.
 
 #### `GET /api/me`
 - **Auth:** any authenticated.
-- **Response (200):** the current user's row.
-  - `staff`: `id, email, first_name, middle_name, last_name, position, branch, phone, status` + `"type": "staff"`.
-  - `resident`: `id, email, first_name, middle_name, last_name, suffix, phone, gender, birthdate, civil_status, address, purok, control_no, registry_status, account_status` + `"type": "resident"`.
+- **Response (200):** the current user's row **plus** `csrf_token` and `"type"`.
+  - `staff`: `id, email, first_name, middle_name, last_name, position, branch, phone, status`, `"type": "staff"`, `"csrf_token": "..."`.
+  - `resident`: `id, email, first_name, middle_name, last_name, suffix, phone, gender, birthdate, civil_status, address, purok, control_no, registry_status, account_status`, `"type": "resident"`, `"csrf_token": "..."`.
   - **Do NOT return `password_hash`.**
 - **Errors:** `401` if not logged in.
 
@@ -437,7 +460,52 @@ Every response is JSON.
 
 ---
 
-## 3. What NOT to do
+## 3. Frontend integration (single source of truth)
+
+The frontend and backend are wired together ONLY through `public/api-client.js`.
+
+- **One client instance:** `const client = CemboClear.client();`
+- **Load it first** in every page that talks to the API (before any page-specific script):
+  ```html
+  <script src="/api-client.js"></script>
+  ```
+- **All calls go through the client** — never a bare `fetch`:
+  ```js
+  await client.login(identifier, password); // stores session + csrf_token
+  await client.me();                         // refreshes user + csrf_token
+  const list = await client.get('/residents');
+  const created = await client.post('/requests', { agency_id: 1, subject: 'Hi' });
+  await client.put('/residents/12', { first_name: 'Maria' });
+  await client.logout();
+  ```
+- **CSRF is automatic.** The client reads the `csrf_token` returned by login/`me`, stores it in
+  `localStorage`, and attaches `X-CSRF-Token` to every `POST`/`PUT`/`DELETE`/`PATCH`. Page code
+  never needs to (and should not) manage it manually.
+- **Handling responses:** the client returns the parsed JSON object on `2xx`. On non-`2xx` it throws
+  an `Error` whose `.status` is the HTTP code and `.message` is the backend's `message` field.
+  ```js
+  try {
+    await client.post('/requests', {...});
+  } catch (err) {
+    if (err.status === 429) alert('Try again later');
+  }
+  ```
+- **Session expiry:** on `401` the client calls `window.redirectToLogin()` if you define it; otherwise
+  define that global to send the user back to `CCLog-in.html`.
+- **File uploads** use `FormData` (the client auto-detects it and sends `multipart/form-data`):
+  ```js
+  const fd = new FormData();
+  fd.append('file', fileInput.files[0]);
+  fd.append('kind', 'valid_id');
+  await client.post('/upload', fd);
+  ```
+
+> The backend is the security authority; the client is a convenience layer. The token is still
+> validated server-side on every mutating request regardless of what the client sends.
+
+---
+
+## 4. What NOT to do
 
 1. **Do not rename tables/columns** from `schema.sql`.
 2. **Do not invent new endpoints** absent from this list unless the UI clearly requires one — and if you add one, call it out explicitly in your reply with the UI evidence.
@@ -452,7 +520,7 @@ Every response is JSON.
 
 ---
 
-## 4. Schema reference (authoritative tables)
+## 5. Schema reference (authoritative tables)
 
 `staff`, `residents`, `agencies`, `request_types`, `requests`, `attachments`, `certificate_purposes`, `certificate_applications`, `appointments`, `mail`, `notifications`, `audit_logs`, `transactions`.
 

@@ -79,6 +79,19 @@ class MailBoxController
             Response::error('Subject or body is required.', 422);
         }
 
+        // Recipient existence validation
+        if ($recipientType === 'staff') {
+            $exists = $this->db->query('SELECT id FROM staff WHERE id = ?', [$recipientId])->fetch();
+            if (!$exists) {
+                Response::error('Recipient staff account not found.', 422);
+            }
+        } else {
+            $exists = $this->db->query('SELECT id FROM residents WHERE id = ?', [$recipientId])->fetch();
+            if (!$exists) {
+                Response::error('Recipient resident account not found.', 422);
+            }
+        }
+
         $senderStaff = $type === 'staff' ? $id : null;
         $senderResident = $type === 'resident' ? $id : null;
         $recipientStaff = $recipientType === 'staff' ? $recipientId : null;
@@ -98,15 +111,24 @@ class MailBoxController
     {
         Auth::requireRole();
 
+        $userId = Auth::id();
+        $userType = Auth::type();
         $mailId = (int)$id;
-        $existing = $this->db->query('SELECT id FROM mail WHERE id = ?', [$mailId])->fetch();
+
+        $recipientColumn = ($userType === 'staff') ? 'recipient_staff_id' : 'recipient_resident_id';
+
+        $existing = $this->db->query(
+            "SELECT id FROM mail WHERE id = ? AND {$recipientColumn} = ?",
+            [$mailId, $userId]
+        )->fetch();
+
         if (!$existing) {
             Response::notFound('Mail not found');
         }
 
         $this->db->execute(
-            'UPDATE mail SET is_read = 1 WHERE id = ?',
-            [$mailId]
+            "UPDATE mail SET is_read = 1 WHERE id = ? AND {$recipientColumn} = ?",
+            [$mailId, $userId]
         );
 
         Response::json(['message' => 'Marked as read']);

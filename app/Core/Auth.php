@@ -19,11 +19,13 @@ class Auth
     {
         if (session_status() === PHP_SESSION_NONE) {
             $lifetime = config('session.lifetime', 7200);
+            $secure = config('session.secure', false) || (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
             session_set_cookie_params([
                 'lifetime' => $lifetime,
                 'path'     => '/',
-                'httponly'  => true,
+                'httponly' => true,
                 'samesite' => 'Lax',
+                'secure'   => $secure,
             ]);
             session_start();
         }
@@ -33,6 +35,9 @@ class Auth
     public static function loginStaff(int $staffId, string $position = ''): void
     {
         self::start();
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
+        }
         $_SESSION['user_id']   = $staffId;
         $_SESSION['user_type'] = 'staff';
         $_SESSION['role']      = $position;
@@ -42,6 +47,9 @@ class Auth
     public static function loginResident(int $residentId): void
     {
         self::start();
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
+        }
         $_SESSION['user_id']   = $residentId;
         $_SESSION['user_type'] = 'resident';
         $_SESSION['role']      = 'resident';
@@ -57,11 +65,14 @@ class Auth
             setcookie(
                 session_name(),
                 '',
-                time() - 42000,
-                $params['path'],
-                $params['domain'],
-                $params['secure'],
-                $params['httponly']
+                [
+                    'expires'  => time() - 42000,
+                    'path'     => $params['path'],
+                    'domain'   => $params['domain'],
+                    'secure'   => $params['secure'],
+                    'httponly' => $params['httponly'],
+                    'samesite' => $params['samesite'] ?? 'Lax',
+                ]
             );
         }
         session_destroy();
@@ -95,10 +106,25 @@ class Auth
         return $_SESSION['role'] ?? null;
     }
 
+    /** Check if the current authenticated user has an administrator role. */
+    public static function isAdmin(): bool
+    {
+        self::start();
+        if (self::type() !== 'staff') {
+            return false;
+        }
+        $role = self::role();
+        if ($role === null || $role === '') {
+            return false;
+        }
+        $normalized = strtolower(trim($role));
+        return str_contains($normalized, 'admin');
+    }
+
     /**
-     * Require a specific user type. Sends 401/403 and exits if not met.
+     * Require a specific user type or role. Sends 401/403 and exits if not met.
      *
-     * @param string $type 'staff', 'resident', or 'any'
+     * @param string $type 'staff', 'resident', 'admin', or 'any'
      */
     public static function requireRole(string $type = 'any'): void
     {
@@ -106,8 +132,21 @@ class Auth
             Response::unauthorized();
         }
 
+        if ($type === 'admin') {
+            if (!self::isAdmin()) {
+                Response::forbidden();
+            }
+            return;
+        }
+
         if ($type !== 'any' && self::type() !== $type) {
             Response::forbidden();
         }
+    }
+
+    /** Require an admin role (staff member with administrative position). */
+    public static function requireAdmin(): void
+    {
+        self::requireRole('admin');
     }
 }

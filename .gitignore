@@ -7,6 +7,10 @@
 /storage/uploads/*
 !/storage/uploads/.gitkeep
 
+# Runtime rate-limit state (transient)
+/storage/rate_limits/*
+!/storage/rate_limits/.gitkeep
+
 # OS files
 .DS_Store
 Thumbs.db
