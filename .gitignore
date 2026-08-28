@@ -22,3 +22,6 @@ Thumbs.db
 # Composer (if added later)
 /vendor/
 composer.lock
+
+# Browser/test artifacts
+/.playwright-mcp/

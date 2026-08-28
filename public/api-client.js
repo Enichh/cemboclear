@@ -41,13 +41,14 @@
       return String(global.CEMBOCLEAR_API_BASE).replace(/\/+$/, '');
     }
 
-    // Locate this script's own src, e.g. "/cemboclear/public/api-client.js".
+    // Locate this script's own resolved URL (e.g. "http://localhost/cemboclear/public/api-client.js").
     var scripts = document.getElementsByTagName('script');
     for (var i = scripts.length - 1; i >= 0; i--) {
-      var src = scripts[i].getAttribute('src');
+      var src = scripts[i].src || scripts[i].getAttribute('src');
       if (src && src.indexOf('api-client.js') !== -1) {
         // Directory containing api-client.js (the public dir) + "/api".
-        return src.replace(/\/api-client\.js(\?.*)?$/, '').replace(/\/+$/, '') + '/api';
+        var baseDir = src.replace(/(?:^|\/)api-client\.js(\?.*)?$/, '').replace(/\/+$/, '');
+        return (baseDir || '.') + '/api';
       }
     }
 
