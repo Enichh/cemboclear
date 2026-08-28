@@ -76,6 +76,7 @@ $router->post('/api/upload',                    [App\Features\FileUploads\FileUp
 $router->get('/api/mail',                       [App\Features\MailBox\MailBoxController::class, 'index']);
 $router->post('/api/mail',                      [App\Features\MailBox\MailBoxController::class, 'send']);
 $router->put('/api/mail/{id}/read',             [App\Features\MailBox\MailBoxController::class, 'markRead']);
+$router->get('/api/mail/recipients/search',     [App\Features\MailBox\MailBoxController::class, 'searchRecipients']);
 
 // ─── Notifications ───────────────────────────────────────────────────────
 $router->get('/api/notifications',              [App\Features\Notifications\NotificationsController::class, 'index']);

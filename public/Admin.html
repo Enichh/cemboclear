@@ -66,18 +66,14 @@
                 <button onclick="document.getElementById('compose-mail-modal').classList.add('hidden')" class="text-gray-500 hover:text-gray-900 text-xl font-bold">&times;</button>
             </div>
             <form id="compose-mail-form" class="p-6 space-y-4">
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Recipient ID</label>
-                        <input type="number" id="mail-recipient-id" class="w-full border border-gray-300 rounded-xl p-3 text-sm focus:outline-none focus:border-blue-500" placeholder="e.g. 1" required />
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Recipient</label>
+                    <div class="relative">
+                        <input type="text" id="mail-recipient-search" autocomplete="off" class="w-full border border-gray-300 rounded-xl p-3 text-sm focus:outline-none focus:border-blue-500" placeholder="Search recipient by name..." />
+                        <div id="mail-recipient-results" class="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg hidden max-h-64 overflow-y-auto"></div>
                     </div>
-                    <div>
-                        <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Recipient Type</label>
-                        <select id="mail-recipient-type" class="w-full border border-gray-300 rounded-xl p-3 text-sm focus:outline-none focus:border-blue-500">
-                            <option value="resident">Resident</option>
-                            <option value="staff">Staff</option>
-                        </select>
-                    </div>
+                    <input type="hidden" id="mail-recipient-id" />
+                    <input type="hidden" id="mail-recipient-type" />
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Subject</label>

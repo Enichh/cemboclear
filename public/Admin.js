@@ -899,12 +899,82 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     const composeForm = document.getElementById('compose-mail-form');
     if (composeForm) {
+        const recipientSearch = document.getElementById('mail-recipient-search');
+        const recipientResults = document.getElementById('mail-recipient-results');
+        const recipientIdEl = document.getElementById('mail-recipient-id');
+        const recipientTypeEl = document.getElementById('mail-recipient-type');
+        let recipientTimer = null;
+
+        // Live recipient search (debounced 250ms), resident + staff combined
+        recipientSearch.addEventListener('input', function () {
+            clearTimeout(recipientTimer);
+            const q = this.value.trim();
+            if (!q) {
+                recipientResults.classList.add('hidden');
+                recipientResults.innerHTML = '';
+                recipientIdEl.value = '';
+                recipientTypeEl.value = '';
+                return;
+            }
+            recipientTimer = setTimeout(async () => {
+                try {
+                    const res = await CemboClear.client().get('/mail/recipients/search?q=' + encodeURIComponent(q));
+                    const recipients = (res && res.data) ? res.data : [];
+                    if (recipients.length === 0) {
+                        recipientResults.innerHTML = '<div class="px-4 py-3 text-sm text-gray-400">No recipients found.</div>';
+                        recipientResults.classList.remove('hidden');
+                        return;
+                    }
+                    recipientResults.innerHTML = recipients.map(r => {
+                        const initials = `${(r.first_name || '?')[0]}${(r.last_name || '?')[0]}`.toUpperCase();
+                        const safeName = String(r.name || '').replace(/\s+/g, ' ').trim();
+                        const sub = r.type === 'staff' ? 'Staff' : (r.control_no || 'Resident');
+                        return `
+                            <div class="recipient-option flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-blue-50" data-id="${r.id}" data-type="${r.type}" data-name="${safeName}">
+                                <div class="w-8 h-8 bg-blue-800 text-white rounded-full flex items-center justify-center font-bold text-xs">${initials}</div>
+                                <div class="flex-1">
+                                    <div class="text-sm font-semibold text-gray-800">${safeName}</div>
+                                    <div class="text-xs text-gray-400">${sub}</div>
+                                </div>
+                            </div>`;
+                    }).join('');
+                    recipientResults.classList.remove('hidden');
+                } catch (err) {
+                    recipientResults.innerHTML = '<div class="px-4 py-3 text-sm text-gray-400">Search failed.</div>';
+                    recipientResults.classList.remove('hidden');
+                }
+            }, 250);
+        });
+
+        // Delegate clicks on result options (fill hidden fields + lock the input)
+        recipientResults.addEventListener('click', function (e) {
+            const opt = e.target.closest('.recipient-option');
+            if (!opt) return;
+            recipientIdEl.value = opt.getAttribute('data-id');
+            recipientTypeEl.value = opt.getAttribute('data-type');
+            recipientSearch.value = opt.getAttribute('data-name');
+            recipientResults.classList.add('hidden');
+            recipientResults.innerHTML = '';
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function (e) {
+            if (!recipientSearch.contains(e.target) && !recipientResults.contains(e.target)) {
+                recipientResults.classList.add('hidden');
+            }
+        });
+
         composeForm.addEventListener('submit', async function (e) {
             e.preventDefault();
-            const recId = document.getElementById('mail-recipient-id')?.value;
-            const recType = document.getElementById('mail-recipient-type')?.value;
+            const recId = recipientIdEl?.value;
+            const recType = recipientTypeEl?.value;
             const subj = document.getElementById('mail-input-subject')?.value;
             const body = document.getElementById('mail-input-body')?.value;
+
+            if (!recId || !recType) {
+                showError('Please select a recipient from the search results.');
+                return;
+            }
 
             try {
                 await CemboClear.client().post('/mail', {
@@ -915,6 +985,10 @@ document.addEventListener('DOMContentLoaded', async function () {
                 });
                 document.getElementById('compose-mail-modal')?.classList.add('hidden');
                 composeForm.reset();
+                recipientIdEl.value = '';
+                recipientTypeEl.value = '';
+                recipientSearch.value = '';
+                recipientResults.classList.add('hidden');
                 await loadMail();
             } catch (err) {
                 showError(err.message || 'Failed to send mail');

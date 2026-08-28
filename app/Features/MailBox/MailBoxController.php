@@ -133,4 +133,63 @@ class MailBoxController
 
         Response::json(['message' => 'Marked as read']);
     }
+
+    /**
+     * GET /api/mail/recipients/search?q=... — Search possible mail recipients by name
+     * (staff only). Returns a unified list of residents and staff.
+     */
+    public function searchRecipients(): void
+    {
+        Auth::requireRole('staff');
+
+        $q = trim($_GET['q'] ?? '');
+        if ($q === '') {
+            Response::json(['data' => []]);
+            return;
+        }
+
+        $like = "%{$q}%";
+
+        $residents = $this->db->query(
+            "SELECT id, first_name, middle_name, last_name, control_no
+             FROM residents
+             WHERE first_name LIKE ? OR last_name LIKE ? OR CONCAT(first_name, ' ', last_name) LIKE ? OR control_no LIKE ?
+             ORDER BY last_name, first_name
+             LIMIT 25",
+            [$like, $like, $like, $like]
+        )->fetchAll();
+
+        $staff = $this->db->query(
+            "SELECT id, first_name, middle_name, last_name, position
+             FROM staff
+             WHERE first_name LIKE ? OR last_name LIKE ? OR CONCAT(first_name, ' ', last_name) LIKE ?
+             ORDER BY last_name, first_name
+             LIMIT 25",
+            [$like, $like, $like]
+        )->fetchAll();
+
+        $results = [];
+        foreach ($residents as $r) {
+            $results[] = [
+                'id'         => (int)$r['id'],
+                'type'       => 'resident',
+                'name'       => trim(($r['first_name'] ?? '') . ' ' . ($r['middle_name'] ?? '') . ' ' . ($r['last_name'] ?? '')),
+                'first_name' => $r['first_name'] ?? '',
+                'last_name'  => $r['last_name'] ?? '',
+                'control_no' => $r['control_no'] ?? null,
+            ];
+        }
+        foreach ($staff as $s) {
+            $results[] = [
+                'id'         => (int)$s['id'],
+                'type'       => 'staff',
+                'name'       => trim(($s['first_name'] ?? '') . ' ' . ($s['middle_name'] ?? '') . ' ' . ($s['last_name'] ?? '')),
+                'first_name' => $s['first_name'] ?? '',
+                'last_name'  => $s['last_name'] ?? '',
+                'control_no' => $s['position'] ?? null,
+            ];
+        }
+
+        Response::json(['data' => $results]);
+    }
 }
