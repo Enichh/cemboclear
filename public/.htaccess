@@ -1,0 +1,9 @@
+# Deny direct access to everything except public/
+RewriteEngine On
+
+# Serve static files directly
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Route /api/* to the front controller
+RewriteRule ^api/(.*)$ api/index.php [QSA,L]

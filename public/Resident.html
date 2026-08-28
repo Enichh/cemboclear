@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CemboClear Resident Dashboard</title>
+    <link rel="stylesheet" href="Resident.css" />
+</head>
+<body>
+    <aside>
+        <div class="brand-header">
+            <img class="brand-logo" src="CClogo/myCC.png" alt="CemboClear logo" />
+            <span class="brand-name">CemboClear</span>
+        </div>
+
+        <div class="user-profile-summary">
+            <div class="profile-icon">R</div>
+            <span class="profile-role">Residents</span>
+        </div>
+
+        <div class="menu-label">Core System</div>
+        <ul class="nav-menu">
+            <li>
+                <a href="#" class="nav-item active" onclick="switchView('calendar-view', this)">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="3" y="4" width="18" height="17" rx="2"></rect>
+                        <path d="M3 9h18"></path>
+                        <path d="M8 2v4"></path>
+                        <path d="M16 2v4"></path>
+                    </svg>
+                    Calendar
+                </a>
+            </li>
+            <li>
+                <a href="#" class="nav-item" onclick="switchView('info-view', this)">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M20 21a7 7 0 0 0-16 0"></path>
+                        <circle cx="12" cy="8" r="4"></circle>
+                    </svg>
+                    Personal Information
+                </a>
+            </li>
+            <li>
+                <a href="#" class="nav-item" onclick="switchView('mailbox-view', this)">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"></path>
+                        <path d="m4 7 8 6 8-6"></path>
+                    </svg>
+                    Mail
+                </a>
+            </li>
+            <li>
+                <a href="#" class="nav-item" onclick="switchView('agencies-view', this)">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M3 21V8l9-5 9 5v13"></path>
+                        <path d="M9 21V12h6v9"></path>
+                        <path d="M3 10h18"></path>
+                    </svg>
+                    Department & Agencies
+                </a>
+            </li>
+            <li>
+                <div class="nav-item" style="cursor: pointer;" onclick="toggleSettingsMenu(this)">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 0 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h.1a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 0 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"></path>
+                    </svg>
+                    Settings
+                </div>
+                <ul class="sub-menu">
+                    <li class="sub-item" onclick="openUserAccountPanel()" role="button" tabindex="0" onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openUserAccountPanel(); }">User Account</li>
+                    <li class="sub-item">Privacy Policy</li>
+                    <li class="sub-item">Terms and Conditions</li>
+                    <li class="sub-item">Contact Us</li>
+                    <li class="sub-item">About Us</li>
+                    <li class="sub-item logout" onclick="window.location.href='CCLog-in.html'">Log out</li>
+                </ul>
+            </li>
+        </ul>
+    </aside>
+
+    <div id="user-account-backdrop" class="user-account-backdrop" onclick="closeUserAccountPanel()"></div>
+    <div id="user-account-panel" class="user-account-panel" aria-live="polite">
+        <div class="user-account-panel-header">
+            <h3 class="user-account-panel-title">User Account</h3>
+            <button type="button" class="user-account-close-btn" onclick="closeUserAccountPanel()" aria-label="Close user account">×</button>
+        </div>
+        <p class="user-account-panel-subtitle">Update your resident account details and security settings here.</p>
+        <div class="user-account-form">
+            <div class="user-account-field">
+                <label for="account-email">Email</label>
+                <input id="account-email" type="email" value="juan.delacruz@email.com" />
+            </div>
+            <div class="user-account-field">
+                <label for="account-phone">Phone Number</label>
+                <input id="account-phone" type="tel" value="+63 917 123 4567" />
+            </div>
+            <div class="user-account-field">
+                <label for="account-birthdate">Birthdate</label>
+                <input id="account-birthdate" type="date" value="1990-01-15" />
+            </div>
+            <div class="user-account-section-title">Change Password</div>
+            <div class="user-account-field">
+                <label for="account-current-password">Current Password</label>
+                <input id="account-current-password" type="password" placeholder="Enter current password" />
+            </div>
+            <div class="user-account-field">
+                <label for="account-new-password">New Password</label>
+                <input id="account-new-password" type="password" placeholder="Enter new password" />
+            </div>
+        </div>
+        <div class="user-account-actions">
+            <button type="button" class="user-account-btn secondary" onclick="closeUserAccountPanel()">Cancel</button>
+            <button type="button" class="user-account-btn primary">Save</button>
+        </div>
+    </div>
+
+    <main>
+        <nav class="top-navbar">
+            <div class="navbar-title">Online Appointment For Resident</div>
+            <div class="navbar-user-area">
+                <div class="user-pill" onclick="toggleResidentProfile()" role="button" tabindex="0" onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleResidentProfile(); }">
+                    <div class="user-pill-initials">JD</div>
+                    <span>Juan M. Dela Cruz</span>
+                </div>
+                <div class="bell-notification" onclick="toggleNotifications()" role="button" tabindex="0" onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleNotifications(); }">
+                    <svg class="bell-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M15 17H5.4a1 1 0 0 1-.9-1.4 3 3 0 0 0 .3-1.4V10a5 5 0 0 1 10 0v4.2a3 3 0 0 0 .3 1.4 1 1 0 0 1-.9 1.4H15Z"></path>
+                        <path d="M9 17v1a3 3 0 0 0 6 0v-1"></path>
+                    </svg>
+                    <span class="bell-dot"></span>
+                </div>
+            </div>
+        </nav>
+
+        <div id="notifications-panel" class="notifications-panel" aria-live="polite">
+            <div class="notifications-header">
+                <h3 class="notifications-title">Notifications</h3>
+                <button type="button" class="notifications-close-btn" onclick="closeNotifications()" aria-label="Close notifications">×</button>
+            </div>
+            <div class="notification-item"><strong>Appointment Reminder:</strong> Your request is scheduled for tomorrow at 9:00 AM.</div>
+            <div class="notification-item"><strong>Admin Update:</strong> Your complaint has been received and is being reviewed.</div>
+            <div class="notification-item"><strong>System Notice:</strong> Your profile details were updated successfully.</div>
+        </div>
+
+        <div class="view-container">
+            <div id="calendar-view" class="dashboard-view active-view">
+                <h2 class="view-title">Calendar</h2>
+                <div class="calendar-wrapper">
+                    <div class="calendar-header">
+                        <div class="calendar-year">2026</div>
+                        <div class="calendar-month">APRIL</div>
+                    </div>
+                    <div class="calendar-grid">
+                        <span class="day-label">Sun</span><span class="day-label">Mon</span><span class="day-label">Tue</span><span class="day-label">Wed</span><span class="day-label">Thu</span><span class="day-label">Fri</span><span class="day-label">Sat</span>
+
+                        <span class="calendar-day"></span><span class="calendar-day"></span><span class="calendar-day"></span>
+                        <span class="calendar-day day-booked">1</span><span class="calendar-day day-booked">2</span><span class="calendar-day day-booked">3</span><span class="calendar-day">4</span>
+                        <span class="calendar-day">5</span><span class="calendar-day day-available">6</span><span class="calendar-day day-available">7</span><span class="calendar-day day-available">8</span><span class="calendar-day day-available">9</span><span class="calendar-day day-available">10</span><span class="calendar-day">11</span>
+                        <span class="calendar-day">12</span><span class="calendar-day">13</span><span class="calendar-day">14</span><span class="calendar-day day-available">15</span><span class="calendar-day day-available">16</span><span class="calendar-day day-available">17</span><span class="calendar-day">18</span>
+                        <span class="calendar-day">19</span><span class="calendar-day">20</span><span class="calendar-day">21</span><span class="calendar-day">22</span><span class="calendar-day">23</span><span class="calendar-day">24</span><span class="calendar-day">25</span>
+                        <span class="calendar-day">26</span><span class="calendar-day">27</span><span class="calendar-day">28</span><span class="calendar-day">29</span><span class="calendar-day">30</span><span class="calendar-day"></span><span class="calendar-day"></span>
+                    </div>
+                </div>
+                <div class="calendar-legend">
+                    <span class="legend-pill legend-avail">Available</span>
+                    <span class="legend-pill legend-booked">Fully Booked</span>
+                </div>
+
+                <h3 class="time-section-title">TIME</h3>
+                <div class="time-divider"></div>
+                <div class="time-slot-list">
+                    <div class="time-slot"><div class="time-left"><input type="radio" name="time" disabled /> 8:00 - 9:00</div><span class="time-status">Fully Booked</span></div>
+                    <div class="time-slot"><div class="time-left"><input type="radio" name="time" disabled /> 9:00 - 10:00</div><span class="time-status">Fully Booked</span></div>
+                    <div class="time-slot"><div class="time-left"><input type="radio" name="time" disabled /> 10:00 - 11:00</div><span class="time-status">Fully Booked</span></div>
+                </div>
+            </div>
+
+            <div id="info-view" class="dashboard-view">
+                <h2 class="view-title">Information</h2>
+                <form class="info-form" onsubmit="event.preventDefault();">
+                    <div class="form-grid-row">
+                        <div class="form-input-container"><input type="text" placeholder="Last Name" /><span class="input-sublabel">( Last Name )</span></div>
+                        <div class="form-input-container"><input type="text" placeholder="Suffix, e.g., Jr., Sr., III, IV" /><span class="input-sublabel">( Suffix )</span></div>
+                        <div class="form-input-container"><input type="text" placeholder="First Name" /><span class="input-sublabel">( First Name )</span></div>
+                        <div class="form-input-container"><input type="text" placeholder="Middle Name" /><span class="input-sublabel">( Middle Name )</span></div>
+                    </div>
+                    <div class="form-grid-row">
+                        <div class="form-input-container"><input type="text" placeholder="mm/dd/yyyy" /><span class="input-sublabel">( Birth Date )</span></div>
+                        <div class="form-input-container"><input type="text" placeholder="Birth Place" /><span class="input-sublabel">( Birth Place )</span></div>
+                        <div class="form-input-container">
+                            <select><option>Sex</option><option>Male</option><option>Female</option></select>
+                            <span class="input-sublabel">( Sex )</span>
+                        </div>
+                        <div class="form-input-container">
+                            <select><option>Civil Status</option><option>Single</option><option>Married</option></select>
+                            <span class="input-sublabel">( Civil Status )</span>
+                        </div>
+                    </div>
+                    <div class="form-grid-row">
+                        <div class="form-input-container" style="grid-column: span 3;"><input type="text" placeholder="House Address" /><span class="input-sublabel">( Residence Address )</span></div>
+                        <div class="form-input-container"><input type="text" placeholder="Citizenship" /><span class="input-sublabel">( Citizenship )</span></div>
+                    </div>
+                    <div class="form-grid-row" style="grid-template-columns: 1fr 1fr;">
+                        <div class="form-input-container"><input type="text" placeholder="Contact Number" /><span class="input-sublabel">( Contact Number )</span></div>
+                        <div class="form-input-container"><input type="email" placeholder="Email Address" /><span class="input-sublabel">( E-mail Address )</span></div>
+                    </div>
+
+                    <div class="form-section-heading">Purpose of Certificate</div>
+                    <div class="radio-grid">
+                        <label class="radio-option"><input type="radio" name="purpose" /> Barangay Certificate of Residency</label>
+                        <label class="radio-option"><input type="radio" name="purpose" /> First-Time Job Seeker Barangay Certificate</label>
+                        <label class="radio-option"><input type="radio" name="purpose" /> Barangay Certificate of Indigency</label>
+                        <label class="radio-option"><input type="radio" name="purpose" /> Barangay Business-related Certification</label>
+                        <label class="radio-option" style="grid-column: span 2;"><input type="radio" name="purpose" /> Barangay Certificate of Good Moral Character</label>
+                    </div>
+
+                    <div class="upload-row">
+                        <div class="form-input-container">
+                            <label>Signature</label>
+                            <div class="file-upload-box">Signature Attachment</div>
+                        </div>
+                        <div class="form-input-container">
+                            <label>Valid ID</label>
+                            <div class="file-upload-box">Valid ID Attachment</div>
+                        </div>
+                        <div class="form-input-container">
+                            <label>Date/Time</label>
+                            <input type="datetime-local" />
+                        </div>
+                    </div>
+
+                    <div class="action-btn-container">
+                        <button type="submit" class="btn-primary">Apply</button>
+                    </div>
+                </form>
+            </div>
+
+            <div id="mailbox-view" class="dashboard-view">
+                <h2 class="view-title">Mail Box</h2>
+                <div class="mailbox-controls">
+                    <div class="mail-actions-left">
+                        <button class="mail-btn">Archive</button>
+                        <select class="mail-btn"><option>None</option></select>
+                    </div>
+                    <div class="mail-search-bar">
+                        <input type="text" placeholder="Search mail" />
+                        <button class="search-icon-btn" type="button" aria-label="Search">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <circle cx="11" cy="11" r="6"></circle>
+                                <path d="m20 20-4.2-4.2"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="mail-actions-right">
+                        <button class="mail-icon-action" type="button" aria-label="Archive">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M4 7h16"></path>
+                                <path d="M5 7l1 10a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1l1-10"></path>
+                                <path d="M9 11h6"></path>
+                                <path d="M10 3h4"></path>
+                            </svg>
+                        </button>
+                        <button class="mail-icon-action" type="button" aria-label="Delete">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M4 7h16"></path>
+                                <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+                                <path d="M8 7l1 12a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1l1-12"></path>
+                                <path d="M10 11v5"></path>
+                                <path d="M14 11v5"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="mailbox-canvas">
+                    <div class="mail-list">
+                        <div class="mail-list-header">Inbox</div>
+                        <div class="mail-item active">
+                            <div class="mail-item-top">
+                                <span class="mail-item-title">Barangay Admin</span>
+                                <span class="mail-item-time">10:15 AM</span>
+                            </div>
+                            <div class="mail-item-preview">Your appointment request has been received and is under review.</div>
+                        </div>
+                        <div class="mail-item">
+                            <div class="mail-item-top">
+                                <span class="mail-item-title">Health Center</span>
+                                <span class="mail-item-time">Yesterday</span>
+                            </div>
+                            <div class="mail-item-preview">Please confirm your preferred health schedule for the next available slot.</div>
+                        </div>
+                        <div class="mail-item">
+                            <div class="mail-item-top">
+                                <span class="mail-item-title">Social Welfare</span>
+                                <span class="mail-item-time">Mon</span>
+                            </div>
+                            <div class="mail-item-preview">Additional information is needed for your assistance request.</div>
+                        </div>
+                    </div>
+                    <div class="mail-detail">
+                        <div class="mail-detail-title">Appointment Request Update</div>
+                        <div class="mail-detail-meta">
+                            <span><strong>From:</strong> Barangay Admin</span>
+                            <span><strong>Date:</strong> August 7, 2026</span>
+                            <span><strong>Subject:</strong> Request Received</span>
+                        </div>
+                        <div class="mail-detail-body">
+                            Hello Juan, your request has been received successfully. The office is reviewing your appointment details and will notify you once your schedule is confirmed. Please keep your contact number active for any follow-up.
+                        </div>
+                        <div class="mail-detail-actions">
+                            <button type="button">Reply</button>
+                            <button type="button">Forward</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="agencies-view" class="dashboard-view">
+                <h2 class="view-title">Department & Agencies</h2>
+                <div class="agencies-grid">
+                    <div class="agency-card admin">
+                        <div>
+                            <div class="agency-header">
+                                <img class="agency-icon" src="CClogo/Administrator.png" alt="Administrative" />
+                                Administrative
+                            </div>
+                            <p class="agency-desc">Oversees all resident requests and ensures proper routing, monitoring, and resolution.</p>
+                            <ul class="agency-services">
+                                <li>General Inquiry/Concern</li>
+                                <li>Resident Record Correction</li>
+                                <li>System Feedback Report</li>
+                                <li>Community Improvement Suggestion</li>
+                                <li>Official Information Request</li>
+                                <li>Request Barangay Profile</li>
+                            </ul>
+                        </div>
+                        <button type="button" class="btn-agency-action" onclick="openComplaintModal('Administrative')">Request</button>
+                    </div>
+
+                    <div class="agency-card health">
+                        <div>
+                            <div class="agency-header">
+                                <img class="agency-icon" src="CClogo/HealthCenter.png" alt="Health" />
+                                Health
+                            </div>
+                            <p class="agency-desc">Handles urgent health and emergency response concerns, medical assistance, and critical support services.</p>
+                            <ul class="agency-services">
+                                <li>Medical Assistance Request</li>
+                                <li>Health Certificate Inquiry</li>
+                                <li>Vaccination Slot Request</li>
+                                <li>Senior Citizen Health Program</li>
+                                <li>Community Health Concern Report</li>
+                            </ul>
+                        </div>
+                        <button type="button" class="btn-agency-action" onclick="openComplaintModal('Health')">Request</button>
+                    </div>
+
+                    <div class="agency-card social">
+                        <div>
+                            <div class="agency-header">
+                                <img class="agency-icon" src="CClogo/WelfareCare.png" alt="Applying and Requirement" />
+                                Social Welfare
+                            </div>
+                            <p class="agency-desc">Provides support programs and assistance for vulnerable individuals and families.</p>
+                            <ul class="agency-services">
+                                <li>Financial Assistance Request</li>
+                                <li>Senior Citizen Program</li>
+                                <li>PWD Assistance Application</li>
+                                <li>Family Welfare Concern</li>
+                                <li>Livelihood Training Program</li>
+                            </ul>
+                        </div>
+                        <button type="button" class="btn-agency-action" onclick="openComplaintModal('Applying and Requirement')">Request</button>
+                    </div>
+
+                    <div class="agency-card peace">
+                        <div>
+                            <div class="agency-header">
+                                <img class="agency-icon" src="CClogo/PeaceAndOrder.png" alt="Peace & Order" />
+                                Peace & Order
+                            </div>
+                            <p class="agency-desc">Manages public safety concerns, complaints, and community security matters.</p>
+                            <ul class="agency-services">
+                                <li>Noise Complaint</li>
+                                <li>Neighborhood Dispute Report</li>
+                                <li>Public Disturbance Report</li>
+                                <li>CCTV Footage Request</li>
+                                <li>Security Assistance Request</li>
+                            </ul>
+                        </div>
+                        <button type="button" class="btn-agency-action" onclick="openComplaintModal('Peace & Order')">Request</button>
+                    </div>
+
+                    <div class="agency-card disaster">
+                        <div>
+                            <div class="agency-header">
+                                <img class="agency-icon" src="CClogo/DisasterResponse.png" alt="Emergency" />
+                                Disaster Response
+                            </div>
+                            <p class="agency-desc">Responds to emergencies, hazard reports, and disaster preparedness concerns.</p>
+                            <ul class="agency-services">
+                                <li>Hazard / Danger Report</li>
+                                <li>Flood Management Query</li>
+                                <li>Evacuation Center Inquiry</li>
+                                <li>Rescue Relief Request</li>
+                                <li>Emergency Preparedness Inquiry</li>
+                            </ul>
+                        </div>
+                        <button type="button" class="btn-agency-action" onclick="openComplaintModal('Disaster Response')">Request</button>
+                    </div>
+
+                    <div class="agency-card env">
+                        <div>
+                            <div class="agency-header">
+                                <img class="agency-icon" src="CClogo/Environment.png" alt="Environment & Sanitation" />
+                                Environment & Sanitation
+                            </div>
+                            <p class="agency-desc">Handles environmental concerns, sanitation issues, and community cleanliness.</p>
+                            <ul class="agency-services">
+                                <li>Garbage Collection Complaint</li>
+                                <li>Illegal Dumping Report</li>
+                                <li>Drainage Clogging Issue</li>
+                                <li>Street Cleaning Request</li>
+                                <li>Environmental Hazard Report</li>
+                            </ul>
+                        </div>
+                        <button type="button" class="btn-agency-action" onclick="openComplaintModal('Environment & Sanitation')">Request</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="resident-profile-backdrop" class="resident-profile-backdrop" onclick="closeResidentProfile()"></div>
+    <div id="resident-profile-card" class="resident-profile-card" aria-live="polite">
+        <button type="button" class="close-btn" onclick="closeResidentProfile()" aria-label="Close profile">×</button>
+        <div class="resident-profile-header">
+            <label class="resident-profile-avatar-upload" for="profile-photo-input">
+                <img id="resident-profile-preview" src="" alt="Profile preview" style="display:none;" />
+                <span id="resident-profile-avatar-fallback">JD</span>
+            </label>
+            <div>
+                <h3 id="resident-profile-name-display">Juan M. Dela Cruz</h3>
+                <p>Authorized Resident</p>
+            </div>
+        </div>
+        <div class="resident-profile-form">
+            <input id="profile-photo-input" type="file" accept="image/*" hidden />
+            <div class="resident-profile-field">
+                <label for="resident-full-name">Full Name</label>
+                <input id="resident-full-name" type="text" value="Juan M. Dela Cruz" />
+            </div>
+            <div class="resident-profile-field">
+                <label for="resident-email">Email</label>
+                <input id="resident-email" type="email" value="juan.delacruz@email.com" />
+            </div>
+            <div class="resident-profile-field">
+                <label for="resident-contact">Contact Number</label>
+                <input id="resident-contact" type="tel" value="+63 917 123 4567" />
+            </div>
+            <div class="resident-profile-field">
+                <label for="resident-address">Address</label>
+                <textarea id="resident-address" rows="3">Barangay Cembo, Makati City</textarea>
+            </div>
+            <div class="resident-profile-field">
+                <label for="resident-role">Role</label>
+                <input id="resident-role" type="text" value="Resident User" />
+            </div>
+            <div class="resident-profile-actions">
+                <button type="button" class="user-account-btn secondary" onclick="closeResidentProfile()">Cancel</button>
+                <button type="button" class="user-account-btn primary" onclick="saveResidentProfile()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="complaint-modal" class="complaint-modal">
+        <div class="complaint-modal-panel">
+            <div class="complaint-modal-header">
+                <div>
+                    <h3 class="complaint-modal-title">Submit Request / Concern</h3>
+                    <p class="complaint-modal-subtitle">Routing details to the Office via: <span id="modal-dept-name"></span></p>
+                </div>
+                <button type="button" class="complaint-close-btn" onclick="closeComplaintModal()">&times;</button>
+            </div>
+            <form class="complaint-form" onsubmit="submitComplaint(event)">
+                <div class="complaint-field-group">
+                    <label for="complaint-type">Type of Request / Concern</label>
+                    <select id="complaint-type" class="complaint-field" required>
+                        <option value="">-- Select request type --</option>
+                    </select>
+                </div>
+                <div class="complaint-field-group">
+                    <label for="complaint-message">Details</label>
+                    <textarea id="complaint-message" class="complaint-field" placeholder="Please explain the service needed, concern, or assistance required from the office..." required></textarea>
+                </div>
+                <div class="complaint-field-group">
+                    <label for="complaint-file">Supporting Document / Proof (Optional)</label>
+                    <div class="complaint-file-wrapper">
+                        <label for="complaint-file" class="complaint-file-label">Choose file</label>
+                        <span id="complaint-file-name" class="complaint-file-name">No file chosen</span>
+                        <input id="complaint-file" class="complaint-file-input" type="file" />
+                    </div>
+                </div>
+                <div class="complaint-actions">
+                    <button type="button" class="complaint-btn cancel" onclick="closeComplaintModal()">Cancel</button>
+                    <button type="submit" class="complaint-btn submit">Submit Request</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="Resident.js"></script>
+</body>
+</html>

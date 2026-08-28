@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CemboClear - Create Account</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: radial-gradient(circle at center, #0077c0 0%, #003366 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 40px 20px;
+        }
+
+        .signup-card {
+            background-color: #ffffff;
+            width: 100%;
+            max-width: 500px;
+            padding: 35px 45px;
+            border-radius: 4px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Logo & Header Section */
+        .header-section {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 30px;
+        }
+
+        .logo-img {
+            max-height: 50px;
+            width: auto;
+        }
+
+        .brand-name {
+            color: #0056b3;
+            font-size: 32px;
+            font-weight: 700;
+        }
+
+        .page-title {
+            color: #1a0dab;
+            font-size: 24px;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        .divider {
+            height: 2px;
+            background-color: #7f86d4;
+            width: 100%;
+            margin-bottom: 25px;
+        }
+
+        /* Form Controls */
+        .form-container {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .section-label {
+            color: #1a0dab;
+            font-size: 16px;
+            font-weight: 700;
+            text-align: left;
+        }
+
+        .input-field {
+            width: 100%;
+            padding: 10px 15px;
+            border: 1px solid #7a7a7a;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #333333;
+            outline: none;
+            background-color: #ffffff;
+        }
+
+        .input-field::placeholder {
+            color: #999999;
+        }
+
+        /* Compact field sizing for specific inputs */
+        .half-width {
+            width: 55%;
+        }
+
+        /* Custom Dropdown Styling to replicate arrow types */
+        .select-wrapper {
+            position: relative;
+            width: fit-content;
+        }
+
+        .select-field {
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            padding-right: 35px;
+            cursor: pointer;
+        }
+
+        .select-wrapper::after {
+            content: '';
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-30%);
+            border: 6px solid transparent;
+            border-top-color: #7a7a7a;
+            pointer-events: none;
+        }
+
+        /* Specific Date Picker Arrow Styling */
+        .date-wrapper::after {
+            border: 5px solid transparent;
+            border-top-color: #7a7a7a;
+            transform: translateY(-20%);
+        }
+
+        /* Button Footer Section */
+        .footer-section {
+            text-align: center;
+            margin-top: 25px;
+        }
+
+        .btn-signup {
+            background-color: #ffffff;
+            color: #1a0dab;
+            border: 1px solid #555555;
+            border-radius: 20px;
+            padding: 8px 40px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .btn-signup:hover {
+            background-color: #f0f4ff;
+            border-color: #1a0dab;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="signup-card">
+        <div class="header-section">
+            <img class="logo-img" src="CClogo/myCC.png" alt=" ">
+            <span class="brand-name">CemboClear</span>
+        </div>
+
+        <div class="page-title">Create Account</div>
+        <div class="divider"></div>
+
+        <form id="signupForm">
+            <div class="form-container">
+                
+                <div class="form-group">
+                    <label class="section-label">Name</label>
+                    <input type="text" class="input-field" placeholder="First Name" required>
+                    <input type="text" class="input-field" placeholder="M.I Name">
+                    <input type="text" class="input-field" placeholder="Last Name" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="section-label">Birthdate</label>
+                    <div class="select-wrapper date-wrapper">
+                        <input type="text" class="input-field" placeholder="mm/dd/yyyy" onfocus="(this.type='date')" onblur="if(!this.value)this.type='text'" required style="width: 150px;">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="section-label">Gender</label>
+                    <div class="select-wrapper">
+                        <select class="input-field select-field" required style="width: 120px;">
+                            <option value="" disabled selected hidden>Gender</option>
+                            <option value="male">Male</option>
+                            <option value="female">Female</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="section-label">Email</label>
+                    <input type="email" class="input-field" placeholder="Email" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="section-label">Phone No.</label>
+                    <input type="tel" class="input-field" value="+63 | " placeholder="Phone No." required>
+                </div>
+
+                <div class="form-group">
+                    <label class="section-label">Password</label>
+                    <input type="password" class="input-field half-width" placeholder="Password" required>
+                    <input type="password" class="input-field half-width" placeholder="Confirm Password" required>
+                </div>
+
+            </div>
+
+            <div class="divider" style="margin-top: 25px; margin-bottom: 15px;"></div>
+            <div class="footer-section">
+                <button type="submit" class="btn-signup">Sign-Up</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('signupForm')?.addEventListener('submit', function (e) {
+            e.preventDefault();
+            window.location.href = 'CCLog-in.html';
+        });
+    </script>
+
+</body>
+</html>
