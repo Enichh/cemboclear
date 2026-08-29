@@ -27,9 +27,11 @@ return [
         'lifetime' => 7200, // 2 hours
     ],
 
+    // Upload destination is NOT configurable here — the FileUploadsController writes to
+    // the storage_path('uploads') directory via the storage_path() helper. This block
+    // only configures the constraints that controller validates against.
     'upload' => [
         'max_size'      => 5 * 1024 * 1024, // 5 MB
         'allowed_types' => ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
-        'directory'     => __DIR__ . '/storage/uploads',
     ],
 ];

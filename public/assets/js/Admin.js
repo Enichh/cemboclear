@@ -13,6 +13,23 @@ function showError(message) {
     }
 }
 
+// Show an overlay modal centered. Reveals as a flex container so the card's
+// `items-center justify-center` centering applies (see viewResidentDetail).
+function openModal(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('hidden');
+    el.classList.add('flex');
+}
+
+// Hide an overlay modal, dropping the flex display class.
+function closeModal(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.add('hidden');
+    el.classList.remove('flex');
+}
+
 // Current authenticated user cache
 let currentUser = null;
 let genderPieChart = null;
@@ -195,6 +212,15 @@ function openSecuritySection(subId) {
     document.querySelectorAll('.security-subview').forEach(el => el.classList.add('hidden'));
     const sub = document.getElementById('view-security-' + subId);
     if (sub) sub.classList.remove('hidden');
+
+    // Refresh the audit-log table when the monitoring view opens. loadAuditLogs()
+    // has an internal admin guard that shows a "restricted" message for non-admins,
+    // so non-admins get a clear notice instead of an empty table.
+    if (subId === 'monitoring') {
+        loadAuditLogs();
+    } else if (subId === 'rbac') {
+        loadStaff();
+    }
 }
 
 function activateSecuritySub(subId) {
@@ -630,10 +656,13 @@ async function loadTransactions(filterQuery = '') {
 
         container.innerHTML = txs.map(t => {
             const residentLabel = t.first_name ? `${t.first_name} ${t.last_name}` : ('Resident #' + t.resident_id);
+            const txInitials = t.first_name && t.last_name
+                ? `${t.first_name[0]}${t.last_name[0]}`.toUpperCase()
+                : 'TX';
             return `
                 <div class="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
                     <div class="flex items-center gap-4">
-                        <div class="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center font-bold text-emerald-800 text-2xl">TX</div>
+                        <div class="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center font-bold text-emerald-800 text-2xl">${txInitials}</div>
                         <div>
                             <div class="text-xl font-bold text-gray-800">${t.description || 'Transaction #' + t.id}</div>
                             <div class="text-sm text-gray-500">Resident: <span class="font-semibold text-gray-900">${residentLabel}</span> (ID: #${t.resident_id})</div>
@@ -786,6 +815,71 @@ async function loadAuditLogs() {
     }
 }
 
+// Feature H — Staff Management (GET/POST /api/staff, PUT /api/staff/{id}/status)
+async function loadStaff() {
+    const body = document.getElementById('staff-table-body');
+    if (!body) return;
+
+    // Staff management is admin-only. Guard client-side so non-admins see a
+    // clear notice instead of firing a 403 on the panel.
+    const pos = (currentUser && currentUser.position) ? currentUser.position : '';
+    if (!String(pos).toLowerCase().includes('admin')) {
+        body.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-gray-500">Staff management is restricted to System Administrators.</td></tr>';
+        return;
+    }
+
+    try {
+        const res = await CemboClear.client().get('/staff');
+        const staff = (res && res.data) ? res.data : (Array.isArray(res) ? res : []);
+
+        if (staff.length === 0) {
+            body.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-gray-500">No staff accounts found.</td></tr>';
+            return;
+        }
+
+        body.innerHTML = staff.map(s => {
+            const fullName = [s.first_name, s.middle_name, s.last_name].filter(Boolean).join(' ') || ('Staff #' + s.id);
+            const statusBg = s.status === 'inactive' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700';
+            return `
+                <tr class="bg-white">
+                    <td class="p-4 font-semibold text-gray-800">${fullName}</td>
+                    <td class="p-4 text-gray-600">${s.email || 'N/A'}</td>
+                    <td class="p-4 text-gray-600">${s.position || 'N/A'}</td>
+                    <td class="p-4 text-gray-600">${s.branch || 'N/A'}</td>
+                    <td class="p-4"><span class="inline-flex px-3 py-1 rounded-full ${statusBg} text-xs font-bold uppercase">${s.status || 'active'}</span></td>
+                    <td class="p-4 text-right">
+                        <button onclick="toggleStaffStatus(${s.id})" data-id="${s.id}" data-status="${s.status || 'active'}" class="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-100">${s.status === 'inactive' ? 'Activate' : 'Deactivate'}</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    } catch (err) {
+        body.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-gray-500">Unable to load staff. Restricted to System Administrators.</td></tr>';
+    }
+}
+
+function openCreateStaffModal() {
+    const pos = (currentUser && currentUser.position) ? currentUser.position : '';
+    if (!String(pos).toLowerCase().includes('admin')) {
+        showError('Staff management is restricted to System Administrators.');
+        return;
+    }
+    openModal('create-staff-modal');
+}
+
+async function toggleStaffStatus(id) {
+    try {
+        // Status button carries the current status so we can derive the target.
+        const btn = document.querySelector('#staff-table-body button[data-id="' + id + '"]');
+        const current = btn ? btn.getAttribute('data-status') : 'active';
+        const target = current === 'inactive' ? 'active' : 'inactive';
+        await CemboClear.client().put('/staff/' + id + '/status', { status: target });
+        await loadStaff();
+    } catch (err) {
+        showError(err.message || 'Failed to update staff status');
+    }
+}
+
 // -------------------------------------------------------------------------
 // DOM INITIALIZATION & EVENT LISTENERS
 // -------------------------------------------------------------------------
@@ -809,6 +903,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             const headerInitials = document.getElementById('header-user-initials');
             const sidebarInitials = document.getElementById('sidebar-user-initials');
             const sidebarRole = document.getElementById('sidebar-user-role');
+            const profileAvatar = document.getElementById('profile-avatar-initials');
             const profileNameH = document.getElementById('profile-name-header');
             const profileNameC = document.getElementById('profile-name-card');
             const profileRoleC = document.getElementById('profile-role-card');
@@ -827,6 +922,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             if (headerInitials) headerInitials.textContent = initials;
             if (sidebarInitials) sidebarInitials.textContent = initials;
             if (sidebarRole) sidebarRole.textContent = pos;
+            if (profileAvatar) profileAvatar.textContent = initials;
             if (profileNameH) profileNameH.textContent = fullName;
             if (profileNameC) profileNameC.textContent = fullName;
             if (profileRoleC) profileRoleC.textContent = pos;
@@ -925,7 +1021,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                     description: desc,
                     amount: parseFloat(amt)
                 });
-                document.getElementById('add-transaction-modal')?.classList.add('hidden');
+                closeModal('add-transaction-modal');
                 addTxForm.reset();
                 await loadTransactions();
             } catch (err) {
@@ -1020,7 +1116,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                     subject: subj,
                     body: body
                 });
-                document.getElementById('compose-mail-modal')?.classList.add('hidden');
+                closeModal('compose-mail-modal');
                 composeForm.reset();
                 recipientIdEl.value = '';
                 recipientTypeEl.value = '';
@@ -1029,6 +1125,30 @@ document.addEventListener('DOMContentLoaded', async function () {
                 await loadMail();
             } catch (err) {
                 showError(err.message || 'Failed to send mail');
+            }
+        });
+    }
+
+    // Feature H — Create staff account form
+    const createStaffForm = document.getElementById('create-staff-form');
+    if (createStaffForm) {
+        createStaffForm.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const payload = {
+                first_name: document.getElementById('staff-first-name')?.value,
+                last_name: document.getElementById('staff-last-name')?.value,
+                email: document.getElementById('staff-email')?.value,
+                password: document.getElementById('staff-password')?.value,
+                position: document.getElementById('staff-position')?.value || null,
+                branch: document.getElementById('staff-branch')?.value || null,
+            };
+            try {
+                await CemboClear.client().post('/staff', payload);
+                closeModal('create-staff-modal');
+                createStaffForm.reset();
+                await loadStaff();
+            } catch (err) {
+                showError(err.message || 'Failed to create staff account');
             }
         });
     }
@@ -1047,5 +1167,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     const pos = (currentUser && currentUser.position) ? currentUser.position : '';
     if (String(pos).toLowerCase().includes('admin')) {
         await loadAuditLogs();
+        await loadStaff();
     }
 });
