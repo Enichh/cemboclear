@@ -84,7 +84,7 @@ class ResidentRegistryReadController
 
         $like = "%{$q}%";
         $residents = $this->db->query(
-            'SELECT id, first_name, middle_name, last_name, control_no, phone, registry_status
+            'SELECT id, first_name, middle_name, last_name, gender, address, control_no, phone, registry_status
              FROM residents
              WHERE first_name LIKE ? OR last_name LIKE ? OR control_no LIKE ? OR phone LIKE ?
              ORDER BY last_name, first_name
@@ -144,6 +144,23 @@ class ResidentRegistryReadController
             "SELECT COUNT(*) as cnt FROM appointments WHERE appt_date >= CURDATE() AND status = 'booked'"
         )->fetch()['cnt'];
 
+        $freshness = $this->db->query(
+            "SELECT
+                COUNT(CASE WHEN DATEDIFF(CURDATE(), COALESCE(updated_at, created_at)) <= 30 THEN 1 END) as recent,
+                COUNT(CASE WHEN DATEDIFF(CURDATE(), COALESCE(updated_at, created_at)) > 30 AND DATEDIFF(CURDATE(), COALESCE(updated_at, created_at)) <= 90 THEN 1 END) as warning,
+                COUNT(CASE WHEN DATEDIFF(CURDATE(), COALESCE(updated_at, created_at)) > 90 OR (updated_at IS NULL AND created_at IS NULL) THEN 1 END) as stale
+             FROM residents"
+        )->fetch();
+
+        $totResidents = max(1, (int)$total);
+        $recentCnt = (int)($freshness['recent'] ?? 0);
+        $warningCnt = (int)($freshness['warning'] ?? 0);
+        $staleCnt = (int)($freshness['stale'] ?? 0);
+
+        $recentPct = round(($recentCnt / $totResidents) * 100, 1);
+        $warningPct = round(($warningCnt / $totResidents) * 100, 1);
+        $stalePct = round(max(0, 100 - ($recentPct + $warningPct)), 1);
+
         Response::json([
             'total_residents'        => (int)$total,
             'verified_residents'     => (int)$verified,
@@ -152,6 +169,14 @@ class ResidentRegistryReadController
             'age_distribution'       => $byAge,
             'pending_requests'       => (int)$pendingRequests,
             'upcoming_appointments'  => (int)$upcomingAppointments,
+            'data_freshness'         => [
+                'updated_count'      => $recentCnt,
+                'updated_pct'        => $recentPct,
+                'warning_count'      => $warningCnt,
+                'warning_pct'        => $warningPct,
+                'stale_count'        => $staleCnt,
+                'stale_pct'          => $stalePct,
+            ],
         ]);
     }
 }

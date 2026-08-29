@@ -325,6 +325,38 @@ async function loadDashboardStats() {
         if (verifiedRes) verifiedRes.textContent = stats.verified_residents ?? 0;
         if (upcomingAppt) upcomingAppt.textContent = stats.upcoming_appointments ?? 0;
 
+        if (stats.data_freshness) {
+            const df = stats.data_freshness;
+            const barUpdated = document.getElementById('freshness-bar-updated');
+            const barWarning = document.getElementById('freshness-bar-warning');
+            const barStale = document.getElementById('freshness-bar-stale');
+            const lblUpdated = document.getElementById('freshness-label-updated');
+            const lblWarning = document.getElementById('freshness-label-warning');
+            const lblStale = document.getElementById('freshness-label-stale');
+            const badge = document.getElementById('freshness-status-badge');
+
+            if (barUpdated) barUpdated.style.width = df.updated_pct + '%';
+            if (barWarning) barWarning.style.width = df.warning_pct + '%';
+            if (barStale) barStale.style.width = df.stale_pct + '%';
+
+            if (lblUpdated) lblUpdated.textContent = df.updated_pct + '% Updated';
+            if (lblWarning) lblWarning.textContent = df.warning_pct + '% > 30d';
+            if (lblStale) lblStale.textContent = df.stale_pct + '% Outdated';
+
+            if (badge) {
+                if (df.stale_pct > 20) {
+                    badge.textContent = 'Action Required';
+                    badge.className = 'bg-rose-100 text-rose-700 text-xs font-bold px-2.5 py-1 rounded-md';
+                } else if (df.warning_pct > 30) {
+                    badge.textContent = 'Review Needed';
+                    badge.className = 'bg-amber-100 text-amber-700 text-xs font-bold px-2.5 py-1 rounded-md';
+                } else {
+                    badge.textContent = 'Healthy';
+                    badge.className = 'bg-emerald-100 text-emerald-700 text-xs font-bold px-2.5 py-1 rounded-md';
+                }
+            }
+        }
+
     } catch (err) {
         showError(err.message || 'Failed to load dashboard stats');
     }
@@ -727,6 +759,11 @@ async function loadAuditLogs() {
     if (!body) return;
 
     try {
+        const pos = (currentUser && currentUser.position) ? currentUser.position : '';
+        if (!String(pos).toLowerCase().includes('admin')) {
+            body.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-gray-500">Audit logs are restricted to System Administrators.</td></tr>';
+            return;
+        }
         const res = await CemboClear.client().get('/audit-logs');
         const logs = (res && res.data) ? res.data : (Array.isArray(res) ? res : []);
 
@@ -1004,5 +1041,11 @@ document.addEventListener('DOMContentLoaded', async function () {
     await loadTransactions();
     await loadMail();
     await loadNotifications();
-    await loadAuditLogs();
+
+    // Audit logs are admin-only; skip for non-admin staff (e.g. Encoders)
+    // to avoid a spurious 403 + error banner on their dashboard load.
+    const pos = (currentUser && currentUser.position) ? currentUser.position : '';
+    if (String(pos).toLowerCase().includes('admin')) {
+        await loadAuditLogs();
+    }
 });

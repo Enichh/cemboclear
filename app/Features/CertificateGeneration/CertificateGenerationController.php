@@ -91,6 +91,25 @@ class CertificateGenerationController
         }
 
         $residentId = Auth::id();
+
+        // Require both a signature and a valid government ID on file before a
+        // certificate can be applied for (document-integrity / consent anchor).
+        $hasSignature = $this->db->query(
+            "SELECT COUNT(*) as cnt FROM attachments WHERE resident_id = ? AND kind = 'signature'",
+            [$residentId]
+        )->fetch()['cnt'];
+        if ((int)$hasSignature === 0) {
+            Response::error('A signature is required before applying for a certificate.', 422);
+        }
+
+        $hasValidId = $this->db->query(
+            "SELECT COUNT(*) as cnt FROM attachments WHERE resident_id = ? AND kind = 'valid_id'",
+            [$residentId]
+        )->fetch()['cnt'];
+        if ((int)$hasValidId === 0) {
+            Response::error('A valid government ID is required before applying for a certificate.', 422);
+        }
+
         $this->db->execute(
             'INSERT INTO certificate_applications (resident_id, purpose_id) VALUES (?, ?)',
             [$residentId, $purposeId]

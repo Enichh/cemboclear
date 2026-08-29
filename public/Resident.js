@@ -3,16 +3,33 @@ window.redirectToLogin = function () {
     window.location.href = 'CCLog-in.html';
 };
 
+let residentBannerTimeout = null;
+
+function hideResidentBanner() {
+    const banner = document.getElementById('resident-error-banner');
+    if (banner) {
+        banner.style.display = 'none';
+    }
+    if (residentBannerTimeout) {
+        clearTimeout(residentBannerTimeout);
+        residentBannerTimeout = null;
+    }
+}
+
 // Global inline message region helper (no alert)
 function showError(message) {
     const banner = document.getElementById('resident-error-banner');
     const textEl = document.getElementById('resident-error-text');
     if (banner && textEl) {
+        if (residentBannerTimeout) clearTimeout(residentBannerTimeout);
         textEl.textContent = message || 'An error occurred. Please try again.';
         banner.style.background = '#ffebe9';
         banner.style.borderColor = '#ff8182';
         banner.style.color = '#b20000';
         banner.style.display = 'flex';
+        residentBannerTimeout = setTimeout(() => {
+            hideResidentBanner();
+        }, 5000);
     }
 }
 
@@ -20,13 +37,14 @@ function showSuccess(message) {
     const banner = document.getElementById('resident-error-banner');
     const textEl = document.getElementById('resident-error-text');
     if (banner && textEl) {
+        if (residentBannerTimeout) clearTimeout(residentBannerTimeout);
         textEl.textContent = message;
         banner.style.background = '#e6f4ea';
         banner.style.borderColor = '#34a853';
         banner.style.color = '#137333';
         banner.style.display = 'flex';
-        setTimeout(() => {
-            banner.style.display = 'none';
+        residentBannerTimeout = setTimeout(() => {
+            hideResidentBanner();
         }, 5000);
     }
 }
@@ -126,13 +144,269 @@ async function loadCertificatePurposes() {
     }
 }
 
+// -------------------------------------------------------------------------
+// FEATURE C-1: Inline Canvas Signature Pad (Option B)
+// -------------------------------------------------------------------------
+
+let signatureMode = 'draw';
+let hasDrawnSignature = false;
+let isDrawing = false;
+let sigCtx = null;
+let lastX = 0;
+let lastY = 0;
+
+function switchSignatureMode(mode) {
+    signatureMode = mode;
+    const btnDraw = document.getElementById('tab-sig-draw');
+    const btnUpload = document.getElementById('tab-sig-upload');
+    const panelDraw = document.getElementById('sig-draw-panel');
+    const panelUpload = document.getElementById('sig-upload-panel');
+
+    if (mode === 'draw') {
+        if (btnDraw) btnDraw.classList.add('active');
+        if (btnUpload) btnUpload.classList.remove('active');
+        if (panelDraw) panelDraw.style.display = 'block';
+        if (panelUpload) panelUpload.style.display = 'none';
+        initSignatureCanvas();
+    } else {
+        if (btnDraw) btnDraw.classList.remove('active');
+        if (btnUpload) btnUpload.classList.add('active');
+        if (panelDraw) panelDraw.style.display = 'none';
+        if (panelUpload) panelUpload.style.display = 'block';
+    }
+}
+
+function clearSignatureCanvas() {
+    const canvas = document.getElementById('signature-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    hasDrawnSignature = false;
+    const badge = document.getElementById('sig-status-badge');
+    const statusText = document.getElementById('sig-status-text');
+    if (badge) {
+        badge.className = 'sig-status-pill unready';
+    }
+    if (statusText) {
+        statusText.textContent = 'Awaiting signature';
+    }
+}
+
+function initSignatureCanvas() {
+    const canvas = document.getElementById('signature-canvas');
+    if (!canvas || canvas.dataset.initialized === 'true') return;
+
+    canvas.dataset.initialized = 'true';
+    const ctx = canvas.getContext('2d');
+    sigCtx = ctx;
+
+    const dpr = window.devicePixelRatio || 1;
+
+    // Size the backing store to the ACTUAL rendered CSS box (width:100%),
+    // not the HTML width attribute, so drawing coordinates collected via
+    // getBoundingClientRect() map 1:1 and strokes are not truncated/stretched.
+    function applyCanvasSize() {
+        const cRect = canvas.getBoundingClientRect();
+        const w = cRect.width || 480;
+        const h = cRect.height || 150;
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(h * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = '#0f172a';
+    }
+
+    applyCanvasSize();
+
+    function getCoords(e) {
+        const cRect = canvas.getBoundingClientRect();
+        return {
+            x: (e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0)) - cRect.left,
+            y: (e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0)) - cRect.top
+        };
+    }
+
+    function startDrawing(e) {
+        if (e.button && e.button !== 0) return;
+        isDrawing = true;
+        const coords = getCoords(e);
+        lastX = coords.x;
+        lastY = coords.y;
+    }
+
+    function draw(e) {
+        if (!isDrawing) return;
+        const coords = getCoords(e);
+
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(coords.x, coords.y);
+        ctx.stroke();
+
+        lastX = coords.x;
+        lastY = coords.y;
+        hasDrawnSignature = true;
+
+        const badge = document.getElementById('sig-status-badge');
+        const statusText = document.getElementById('sig-status-text');
+        if (badge) badge.className = 'sig-status-pill ready';
+        if (statusText) statusText.textContent = 'Signature recorded';
+    }
+
+    function stopDrawing() {
+        isDrawing = false;
+    }
+
+    canvas.addEventListener('pointerdown', startDrawing);
+    canvas.addEventListener('pointermove', draw);
+    canvas.addEventListener('pointerup', stopDrawing);
+    canvas.addEventListener('pointerleave', stopDrawing);
+    canvas.addEventListener('pointercancel', stopDrawing);
+
+    // Mouse fallbacks
+    canvas.addEventListener('mousedown', startDrawing);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', stopDrawing);
+
+    // Re-sync backing store on layout changes (window or container resize),
+    // preserving existing ink so strokes never get truncated after a size change.
+    function resizeCanvas() {
+        const cRect = canvas.getBoundingClientRect();
+        const newW = Math.round(cRect.width * dpr);
+        const newH = Math.round(cRect.height * dpr);
+        if (canvas.width === newW && canvas.height === newH) return;
+
+        const snapshot = canvas.toDataURL('image/png');
+        canvas.width = newW;
+        canvas.height = newH;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = '#0f172a';
+        if (hasDrawnSignature) {
+            const img = new Image();
+            img.onload = () => ctx.drawImage(img, 0, 0, newW / dpr, newH / dpr);
+            img.src = snapshot;
+        }
+    }
+
+    if (!canvas.dataset.resizeBound) {
+        canvas.dataset.resizeBound = 'true';
+        window.addEventListener('resize', resizeCanvas);
+        if (typeof ResizeObserver !== 'undefined') {
+            window.__sigResizeObserver?.disconnect();
+            window.__sigResizeObserver = new ResizeObserver(resizeCanvas);
+            window.__sigResizeObserver.observe(canvas);
+        }
+    }
+}
+
+async function getSignatureBlobOrFile() {
+    if (signatureMode === 'upload') {
+        const sigFile = document.getElementById('info-signature')?.files[0];
+        return sigFile || null;
+    }
+
+    if (signatureMode === 'draw') {
+        if (!hasDrawnSignature) return null;
+        const canvas = document.getElementById('signature-canvas');
+        if (!canvas) return null;
+
+        return new Promise((resolve) => {
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    const file = new File([blob], 'drawn_signature.png', { type: 'image/png' });
+                    resolve(file);
+                } else {
+                    resolve(null);
+                }
+            }, 'image/png');
+        });
+    }
+
+    return null;
+}
+
+// Simple client-side validation for the certificate personal-info fields.
+// Returns an error message (string) when a required field is missing/invalid,
+// or null when all required fields are acceptable.
+function validatePersonalInfo() {
+    const val = (id) => {
+        const el = document.getElementById(id);
+        return el ? String(el.value || '').trim() : '';
+    };
+
+    const required = [
+        ['info-last-name',   'Last name'],
+        ['info-first-name',  'First name'],
+        ['info-birthdate',   'Birth date'],
+        ['info-gender',      'Sex'],
+        ['info-address',     'Residence address'],
+        ['info-phone',       'Contact number'],
+        ['info-email',       'Email address'],
+    ];
+
+    for (const [id, label] of required) {
+        if (val(id) === '') {
+            return label + ' is required before applying for a certificate.';
+        }
+    }
+
+    // Civil status is meaningful for the certificate; require it only if the
+    // resident selected the placeholder (i.e. empty). It is optional on the
+    // profile, so we confirm it here when explicitly untouched.
+    if (val('info-civil-status') === '') {
+        return 'Civil status is required before applying for a certificate.';
+    }
+
+    const email = val('info-email');
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return 'Please enter a valid email address.';
+    }
+
+    const phone = val('info-phone');
+    if (phone && !/^[+\d][\d\s\-()]{6,}$/.test(phone)) {
+        return 'Please enter a valid contact number.';
+    }
+
+    return null;
+}
+
 async function handleApplyCertificate(event) {
     event.preventDefault();
     const select = document.getElementById('certificate-purpose-select');
     const purposeId = select ? select.value : null;
 
+    // Purpose is required
     if (!purposeId) {
         showError('Please select a purpose for the certificate.');
+        return;
+    }
+
+    // Personal info fields must be complete (pre-filled from the resident
+    // profile but confirmed before an official document is applied for).
+    const personalInfoError = validatePersonalInfo();
+    if (personalInfoError) {
+        showError(personalInfoError);
+        return;
+    }
+
+    // Signature is required (drawn on canvas or uploaded file)
+    const sigFile = await getSignatureBlobOrFile();
+    if (!sigFile) {
+        showError('Please provide your signature before applying. Draw it on the pad or upload a signature file.');
+        return;
+    }
+
+    // Valid ID attachment is required
+    const idFile = document.getElementById('info-valid-id')?.files[0];
+    if (!idFile) {
+        showError('Please attach a valid government ID to complete your application.');
         return;
     }
 
@@ -140,37 +414,36 @@ async function handleApplyCertificate(event) {
     if (btn) btn.disabled = true;
 
     try {
-        // 1. Submit certificate application
-        const certRes = await CemboClear.client().post('/certificates', {
+        // Upload required attachments FIRST so the backend can verify both the
+        // signature and valid ID exist before creating the certificate application.
+        const formDataSig = new FormData();
+        formDataSig.append('file', sigFile);
+        formDataSig.append('kind', 'signature');
+        if (currentUser && currentUser.id) formDataSig.append('resident_id', currentUser.id);
+        await CemboClear.client().post('/upload', formDataSig);
+
+        const formDataId = new FormData();
+        formDataId.append('file', idFile);
+        formDataId.append('kind', 'valid_id');
+        if (currentUser && currentUser.id) formDataId.append('resident_id', currentUser.id);
+        await CemboClear.client().post('/upload', formDataId);
+
+        // Now create the certificate application (backend re-checks attachments)
+        await CemboClear.client().post('/certificates', {
             purpose_id: parseInt(purposeId, 10)
         });
 
-        // 2. Process signature file upload if selected
-        const sigFile = document.getElementById('info-signature')?.files[0];
-        if (sigFile) {
-            const formDataSig = new FormData();
-            formDataSig.append('file', sigFile);
-            formDataSig.append('kind', 'signature');
-            if (currentUser && currentUser.id) {
-                formDataSig.append('resident_id', currentUser.id);
-            }
-            await CemboClear.client().post('/upload', formDataSig);
-        }
-
-        // 3. Process valid ID file upload if selected
-        const idFile = document.getElementById('info-valid-id')?.files[0];
-        if (idFile) {
-            const formDataId = new FormData();
-            formDataId.append('file', idFile);
-            formDataId.append('kind', 'valid_id');
-            if (currentUser && currentUser.id) {
-                formDataId.append('resident_id', currentUser.id);
-            }
-            await CemboClear.client().post('/upload', formDataId);
-        }
-
-        showSuccess('Certificate application submitted successfully!');
+        showSuccess('Certificate application submitted successfully with signature and valid ID.');
         select.value = '';
+        clearSignatureCanvas();
+        const idInput = document.getElementById('info-valid-id');
+        if (idInput) idInput.value = '';
+        const sigInput = document.getElementById('info-signature');
+        if (sigInput) sigInput.value = '';
+        const sigName = document.getElementById('signature-file-name');
+        if (sigName) sigName.textContent = 'No file chosen';
+        const idName = document.getElementById('valid-id-file-name');
+        if (idName) idName.textContent = 'No file chosen';
         await loadMyCertificates();
 
     } catch (err) {
@@ -310,32 +583,66 @@ async function submitComplaint(event) {
 
     const subjectVal = typeSelect ? typeSelect.value : 'General Request';
     const detailsVal = detailsInput ? detailsInput.value : '';
+    const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
 
+    // Pre-validate attached file before submitting so no partial/orphaned request is created
+    if (file) {
+        const allowedExts = ['.jpg', '.jpeg', '.png', '.webp', '.pdf'];
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+        const fileName = (file.name || '').toLowerCase();
+        const hasValidExt = allowedExts.some(ext => fileName.endsWith(ext));
+        const hasValidType = allowedTypes.includes(file.type);
+
+        if (!hasValidExt && !hasValidType) {
+            showError('File type not allowed. Please upload a PDF, JPG, PNG, or WEBP document.');
+            return;
+        }
+
+        const maxSize = 5 * 1024 * 1024; // 5MB
+        if (file.size > maxSize) {
+            showError('File too large. Maximum allowed size is 5MB.');
+            return;
+        }
+    }
+
+    let res = null;
     try {
         // 1. Submit Request
-        const res = await CemboClear.client().post('/requests', {
+        res = await CemboClear.client().post('/requests', {
             agency_id: currentAgencyId,
             request_type_id: null,
             subject: subjectVal,
             details: detailsVal
         });
+    } catch (err) {
+        showError(err.message || 'Failed to submit request');
+        return;
+    }
 
-        // 2. Upload supporting file if attached
-        if (fileInput && fileInput.files && fileInput.files[0] && res && res.id) {
+    const ticketId = (res && (res.ticket_id || '#REQ-' + res.id)) || 'Request';
+
+    // 2. Upload supporting file if attached
+    if (file && res && res.id) {
+        try {
             const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
+            formData.append('file', file);
             formData.append('kind', 'supporting_document');
             formData.append('request_id', res.id);
             await CemboClear.client().post('/upload', formData);
+            showSuccess('Request submitted successfully! Ticket ID: ' + ticketId);
+        } catch (uploadErr) {
+            showSuccess('Request submitted (' + ticketId + '), but supporting file upload failed: ' + (uploadErr.message || 'upload error'));
         }
-
-        showSuccess('Request submitted successfully! Ticket ID: ' + (res.ticket_id || '#REQ-' + res.id));
-        closeComplaintModal();
-        await loadMyRequests();
-
-    } catch (err) {
-        showError(err.message || 'Failed to submit request');
+    } else {
+        showSuccess('Request submitted successfully! Ticket ID: ' + ticketId);
     }
+
+    closeComplaintModal();
+    const form = document.getElementById('complaint-form');
+    if (form) form.reset();
+    const fileNameDisplay = document.getElementById('complaint-file-name');
+    if (fileNameDisplay) fileNameDisplay.textContent = 'No file chosen';
+    await loadMyRequests();
 }
 
 async function loadMyRequests() {
@@ -370,6 +677,128 @@ async function loadMyRequests() {
 // -------------------------------------------------------------------------
 // FEATURE E: Appointments & Slot Picker (GET slots, POST appt, PUT cancel)
 // -------------------------------------------------------------------------
+
+// Calendar month-grid state (renders real backend availability per day)
+let calendarViewYear = 0;
+let calendarViewMonth = -1; // 0-11
+const CALENDAR_SLOTS_PER_DAY = 8;
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+function dateKey(year, month, day) {
+    return year + '-' + pad2(month + 1) + '-' + pad2(day);
+}
+
+function setHiddenPickerDate(year, month, day) {
+    const picker = document.getElementById('appointment-date-picker');
+    if (picker) picker.value = dateKey(year, month, day);
+}
+
+async function loadMonthAvailability(year, month) {
+    const grid = document.getElementById('resident-calendar-grid');
+    const progress = document.getElementById('resident-calendar-progress');
+    if (!grid) return;
+
+    // Reset cells to 'loading' state first
+    grid.querySelectorAll('.calendar-day').forEach(c => {
+        c.classList.remove('day-booked', 'day-available');
+    });
+    if (progress) progress.style.display = 'block';
+
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const today = new Date();
+    const todayKey = dateKey(today.getFullYear(), today.getMonth(), today.getDate());
+    const todaySeen = new Set();
+
+    // Query the backend once per day (in parallel) so the calendar reflects real availability
+    const requests = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+        const key = dateKey(year, month, d);
+        const cell = grid.querySelector('[data-date="' + key + '"]');
+        if (!cell) continue;
+
+        // Past dates can't be booked
+        if (key < todayKey) {
+            cell.classList.remove('day-available', 'day-booked');
+            cell.classList.add('day-past');
+            continue;
+        }
+
+        requests.push(
+            CemboClear.client().get('/appointments/slots?date=' + key)
+                .then(res => {
+                    const slots = (res && res.slots) ? res.slots : [];
+                    const bookedCount = slots.filter(s => s.available === false).length;
+                    if (bookedCount >= CALENDAR_SLOTS_PER_DAY) {
+                        cell.classList.add('day-booked');
+                    } else {
+                        cell.classList.add('day-available');
+                    }
+                })
+                .catch(() => { /* leave cell neutral on fetch error */ })
+                .finally(() => {
+                    // Mark today
+                    if (key === todayKey && !todaySeen.has(key)) {
+                        todaySeen.add(key);
+                        cell.classList.add('day-today');
+                    }
+                })
+        );
+    }
+
+    await Promise.all(requests);
+    if (progress) progress.style.display = 'none';
+}
+
+function renderResidentCalendar() {
+    const grid = document.getElementById('resident-calendar-grid');
+    if (!grid) return;
+    if (calendarViewMonth < 0) return;
+
+    const year = calendarViewYear;
+    const month = calendarViewMonth;
+
+    const yearEl = document.getElementById('calendar-year');
+    const monthEl = document.getElementById('calendar-month-label');
+    if (yearEl) yearEl.textContent = String(year);
+    if (monthEl) monthEl.textContent = new Date(year, month, 1)
+        .toLocaleString('en-US', { month: 'long' }).toUpperCase();
+
+    const firstDay = new Date(year, month, 1).getDay(); // 0 = Sunday
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const today = new Date();
+    const todayKey = dateKey(today.getFullYear(), today.getMonth(), today.getDate());
+
+    let html = '<span class="day-label">Sun</span><span class="day-label">Mon</span><span class="day-label">Tue</span><span class="day-label">Wed</span><span class="day-label">Thu</span><span class="day-label">Fri</span><span class="day-label">Sat</span>';
+    html += '<span class="calendar-day day-blank"></span>'.repeat(firstDay);
+
+    for (let d = 1; d <= daysInMonth; d++) {
+        const key = dateKey(year, month, d);
+        const isToday = key === todayKey;
+        const extra = isToday ? ' day-today' : '';
+        html += '<span class="calendar-day' + extra + '" data-date="' + key + '" role="button" tabindex="0" ' +
+            'onclick="selectCalendarDate(' + year + ',' + month + ',' + d + ')" ' +
+            'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();selectCalendarDate(' + year + ',' + month + ',' + d + ');}">' +
+            d + '</span>';
+    }
+
+    grid.innerHTML = html;
+    loadMonthAvailability(year, month);
+}
+
+function switchCalendarMonth(delta) {
+    const d = new Date(calendarViewYear, calendarViewMonth + delta, 1);
+    calendarViewYear = d.getFullYear();
+    calendarViewMonth = d.getMonth();
+    renderResidentCalendar();
+}
+
+function selectCalendarDate(year, month, day) {
+    setHiddenPickerDate(year, month, day);
+    const dateDisplay = document.getElementById('selected-date-display');
+    if (dateDisplay) dateDisplay.textContent = dateKey(year, month, day);
+    loadAvailableSlots();
+}
 
 async function loadAvailableSlots() {
     const datePicker = document.getElementById('appointment-date-picker');
@@ -596,7 +1025,13 @@ async function loadResidentNotifications() {
         const unreadCount = notifs.filter(n => !n.is_read).length;
 
         if (badge) {
-            badge.style.display = unreadCount > 0 ? 'inline-block' : 'none';
+            if (unreadCount > 0) {
+                badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                badge.style.display = 'flex';
+            } else {
+                badge.style.display = 'none';
+                badge.textContent = '';
+            }
         }
 
         if (notifs.length === 0) {
@@ -633,6 +1068,12 @@ document.addEventListener('DOMContentLoaded', async function () {
         const today = new Date().toISOString().split('T')[0];
         datePicker.value = today;
     }
+
+    // Initialize the resident calendar to today's month and render it
+    const now = new Date();
+    calendarViewYear = now.getFullYear();
+    calendarViewMonth = now.getMonth();
+    renderResidentCalendar();
 
     // Set static date/time for certificate form
     const dateTimeEl = document.getElementById('info-datetime');
@@ -733,6 +1174,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     // Load initial data
     await loadCertificatePurposes();
+    initSignatureCanvas();
     await loadMyCertificates();
     await loadMyRequests();
     await loadAvailableSlots();

@@ -87,7 +87,7 @@ class ResidentAccountCreationController
             }
         } else {
             $requests = $this->db->query(
-                'SELECT r.id, r.ticket_id, r.subject, r.status, r.created_at,
+                'SELECT r.id, r.ticket_id, r.subject, r.details, r.status, r.created_at,
                         a.name as agency_name
                  FROM requests r
                  JOIN agencies a ON a.id = r.agency_id

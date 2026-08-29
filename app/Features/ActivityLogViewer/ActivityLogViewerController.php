@@ -29,7 +29,8 @@ class ActivityLogViewerController
 
         $logs = $this->db->query(
             'SELECT a.id, a.action, a.ip_address, a.security_status, a.created_at,
-                    s.id as staff_id, s.first_name, s.last_name, s.email
+                    s.id as staff_id, s.first_name, s.last_name, s.email,
+                    CONCAT_WS(\' \', s.first_name, s.last_name) AS actor_name
              FROM audit_logs a
              LEFT JOIN staff s ON s.id = a.staff_id
              ORDER BY a.created_at DESC
