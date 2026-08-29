@@ -257,6 +257,11 @@ function openRecordsData(subId) {
     if (subPanel) {
         subPanel.classList.remove('hidden');
     }
+
+    // Load the Data Freshness Audit search state when that subtab opens
+    if (subId === 'audit') {
+        loadFreshnessAudit(document.getElementById('freshness-search-input')?.value || '');
+    }
 }
 
 function openMailSection(subId) {
@@ -289,6 +294,16 @@ function openMailSection(subId) {
 // -------------------------------------------------------------------------
 
 async function logoutStaff() {
+    openConfirmModal({
+        title: 'Log out?',
+        message: 'Are you sure you want to log out of this account?',
+        confirmText: 'Log out',
+        danger: true,
+        onConfirm: doLogout
+    });
+}
+
+async function doLogout() {
     try {
         await CemboClear.client().logout();
     } catch (e) {
@@ -390,54 +405,68 @@ async function loadDashboardStats() {
 
 // Feature B — Resident Registry (GET /api/residents, GET /api/residents/search)
 let searchDebounceTimer = null;
-async function loadResidents(page = 1, query = '') {
+function getRbiStatusFilter() {
+    const el = document.getElementById('rbi-status-filter');
+    return el ? (el.value || '') : '';
+}
+
+async function loadResidents(page = 1, query = '', status = '') {
     const tableBody = document.getElementById('rbi-table-body');
     if (!tableBody) return;
+
+    status = status === undefined ? getRbiStatusFilter() : status;
+    query = query === undefined ? '' : query;
 
     try {
         let res;
         if (query.trim()) {
+            // Search endpoint doesn't support status server-side, so filter client-side.
             res = await CemboClear.client().get('/residents/search?q=' + encodeURIComponent(query.trim()));
+            let residents = (res && res.data) ? res.data : (Array.isArray(res) ? res : []);
+            if (status) {
+                residents = residents.filter(r => r.registry_status === status);
+            }
+            res = { data: residents, total: residents.length };
         } else {
-            res = await CemboClear.client().get('/residents?page=' + page + '&limit=25');
+            const url = '/residents?page=' + page + '&limit=25' + (status ? '&status=' + encodeURIComponent(status) : '');
+            res = await CemboClear.client().get(url);
         }
 
-        const residents = (res && res.data) ? res.data : (Array.isArray(res) ? res : []);
+        const residents = (res && res.data) ? res.data : [];
         if (residents.length === 0) {
             tableBody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500">No resident records found.</td></tr>';
-            return;
-        }
+        } else {
+            tableBody.innerHTML = residents.map(r => {
+                const fullName = `${r.last_name || ''}, ${r.first_name || ''} ${r.middle_name || ''}`.trim();
+                const initials = `${(r.first_name || 'R')[0]}${(r.last_name || 'U')[0]}`.toUpperCase();
+                const statusClass = r.registry_status === 'verified'
+                    ? 'bg-emerald-100 text-emerald-700'
+                    : 'bg-yellow-100 text-yellow-700';
 
-        tableBody.innerHTML = residents.map(r => {
-            const fullName = `${r.last_name || ''}, ${r.first_name || ''} ${r.middle_name || ''}`.trim();
-            const initials = `${(r.first_name || 'R')[0]}${(r.last_name || 'U')[0]}`.toUpperCase();
-            const statusClass = r.registry_status === 'verified'
-                ? 'bg-emerald-100 text-emerald-700'
-                : 'bg-yellow-100 text-yellow-700';
-
-            return `
-                <tr class="bg-white hover:bg-gray-50">
-                    <td class="p-4">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 bg-blue-800 text-white rounded-full flex items-center justify-center font-bold">${initials}</div>
-                            <div>
-                                <div class="font-semibold text-gray-800">${fullName}</div>
-                                <div class="text-xs text-gray-400">Control No: ${r.control_no || 'N/A'}</div>
+                return `
+                    <tr class="bg-white hover:bg-gray-50">
+                        <td class="p-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 bg-blue-800 text-white rounded-full flex items-center justify-center font-bold">${initials}</div>
+                                <div>
+                                    <div class="font-semibold text-gray-800">${fullName}</div>
+                                    <div class="text-xs text-gray-400">Control No: ${r.control_no || 'N/A'}</div>
+                                </div>
                             </div>
-                        </div>
-                    </td>
-                    <td class="p-4 text-gray-600">${r.address || 'N/A'}</td>
-                    <td class="p-4 text-gray-600 capitalize">${r.gender || 'N/A'}</td>
-                    <td class="p-4">
-                        <span class="inline-flex px-3 py-1 rounded-full ${statusClass} text-xs font-bold capitalize">${r.registry_status || 'pending'}</span>
-                    </td>
-                    <td class="p-4 flex items-center gap-2">
-                        <button onclick="viewResidentDetail(${r.id})" class="text-gray-500 hover:text-blue-700" title="View Details"><i class="fas fa-eye"></i></button>
-                        ${r.registry_status !== 'verified' ? `<button onclick="verifyResident(${r.id})" class="text-emerald-600 hover:text-emerald-800 font-semibold text-xs border border-emerald-300 rounded px-2 py-1">Verify</button>` : ''}
-                    </td>
-                </tr>
-            `;
-        }).join('');
+                        </td>
+                        <td class="p-4 text-gray-600">${r.address || 'N/A'}</td>
+                        <td class="p-4 text-gray-600 capitalize">${r.gender || 'N/A'}</td>
+                        <td class="p-4">
+                            <span class="inline-flex px-3 py-1 rounded-full ${statusClass} text-xs font-bold capitalize">${r.registry_status || 'pending'}</span>
+                        </td>
+                        <td class="p-4 flex items-center gap-2">
+                            <button onclick="viewResidentDetail(${r.id})" class="text-gray-500 hover:text-blue-700" title="View Details"><i class="fas fa-eye"></i></button>
+                            ${r.registry_status !== 'verified' ? `<button onclick="reviewAndVerify(${r.id})" class="text-emerald-600 hover:text-emerald-800 font-semibold text-xs border border-emerald-300 rounded px-2 py-1">Verify</button>` : ''}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
 
         // Pagination buttons
         const pagEl = document.getElementById('rbi-pagination');
@@ -446,13 +475,79 @@ async function loadResidents(page = 1, query = '') {
             let btns = '';
             for (let i = 1; i <= Math.min(totalPages, 5); i++) {
                 const active = i === page ? 'bg-blue-800 text-white font-bold' : 'bg-gray-200 text-gray-600';
-                btns += `<button onclick="loadResidents(${i}, '${query}')" class="w-9 h-9 rounded-full ${active}">${i}</button>`;
+                btns += `<button onclick="loadResidents(${i}, '${query}', '${status}')" class="w-9 h-9 rounded-full ${active}">${i}</button>`;
             }
             pagEl.innerHTML = btns;
         }
 
     } catch (err) {
         showError(err.message || 'Failed to load residents');
+    }
+}
+
+// Data Freshness Audit search (GET /api/residents/search) — shows per-resident staleness
+function freshnessStatus(r) {
+    // Mirror the server-side dashboard thresholds: <=30d recent, 31-90d warning, >90d (or none) stale
+    const ref = r.updated_at || r.created_at;
+    if (!ref) return { key: 'stale', label: 'Outdated', cls: 'bg-rose-100 text-rose-700' };
+    const days = Math.max(0, Math.floor((Date.now() - new Date(ref).getTime()) / 86400000));
+    if (days <= 30)  return { key: 'updated', label: 'Updated',   cls: 'bg-emerald-100 text-emerald-700' };
+    if (days <= 90)  return { key: 'warning', label: 'Review',    cls: 'bg-amber-100 text-amber-700' };
+    return { key: 'stale',   label: 'Outdated', cls: 'bg-rose-100 text-rose-700' };
+}
+
+async function loadFreshnessAudit(query = '') {
+    const container = document.getElementById('freshness-audit-results');
+    const countEl = document.getElementById('freshness-result-count');
+    if (!container) return;
+
+    const q = query.trim();
+    if (!q) {
+        container.innerHTML = 'Enter a resident name or ID above to audit their record freshness.';
+        if (countEl) countEl.textContent = '';
+        return;
+    }
+
+    try {
+        const res = await CemboClear.client().get('/residents/search?q=' + encodeURIComponent(q));
+        const residents = (res && res.data) ? res.data : [];
+
+        if (residents.length === 0) {
+            container.innerHTML = '<div class="p-8 text-center text-gray-500">No residents found for "' + q + '".</div>';
+            if (countEl) countEl.textContent = '0 results';
+            return;
+        }
+
+        if (countEl) countEl.textContent = residents.length + ' resident' + (residents.length === 1 ? '' : 's');
+        container.innerHTML = residents.map(r => {
+            const name = [r.first_name, r.middle_name, r.last_name].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+            const initials = `${(r.first_name || 'R')[0]}${(r.last_name || 'U')[0]}`.toUpperCase();
+            const fs = freshnessStatus(r);
+            const registryClass = r.registry_status === 'verified'
+                ? 'bg-emerald-100 text-emerald-700'
+                : 'bg-yellow-100 text-yellow-700';
+            const lastUpdated = r.updated_at || r.created_at;
+            const lastUpdatedLabel = lastUpdated ? new Date(lastUpdated).toLocaleDateString() : '—';
+
+            return `
+                <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 border border-gray-200 rounded-2xl p-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 bg-blue-800 text-white rounded-full flex items-center justify-center font-bold">${initials}</div>
+                        <div>
+                            <div class="font-semibold text-gray-800">${name} <span class="text-gray-400 font-normal text-xs">(ID: #${r.id})</span></div>
+                            <div class="text-xs text-gray-400">Control No: ${r.control_no || 'N/A'} &middot; Last Updated: ${lastUpdatedLabel}</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="inline-flex px-3 py-1 rounded-full ${registryClass} text-xs font-bold capitalize">${r.registry_status || 'pending'}</span>
+                        <span class="inline-flex px-3 py-1 rounded-full ${fs.cls} text-xs font-bold">${fs.label}</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (err) {
+        container.innerHTML = '<div class="p-8 text-center text-gray-500">Search failed.</div>';
+        if (countEl) countEl.textContent = '';
     }
 }
 
@@ -486,24 +581,121 @@ async function viewResidentDetail(id) {
     }
 }
 
-async function verifyResident(id) {
+function closeVerifyModal() {
+    const modal = document.getElementById('verify-resident-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+}
+
+function openVerifyModal() {
+    const modal = document.getElementById('verify-resident-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+}
+
+// Fallback when an attachment image fails to load inline (e.g. it's a PDF or missing).
+window.attachmentPreviewFail = function (imgEl, dlUrl) {
+    if (!imgEl) return;
+    const box = imgEl.closest('div');
+    if (box) {
+        box.innerHTML = `<div class="p-6 text-center text-sm text-gray-500">Preview unavailable &middot; <a class="text-blue-600 underline" href="${dlUrl}" target="_blank" rel="noopener">Download file</a></div>`;
+    }
+};
+
+// Review a resident's uploaded signature / valid ID before verifying (two-step flow).
+// Fetch the resident detail (now includes attachments) and render a confirmation modal.
+window.reviewAndVerify = async function (id) {
+    let res;
+    try {
+        res = await CemboClear.client().get('/residents/' + id);
+    } catch (err) {
+        showError(err.message || 'Failed to load resident details');
+        return;
+    }
+    if (!res) return;
+
+    const container = document.getElementById('verify-resident-content');
+    if (!container) return;
+
+    const attachments = Array.isArray(res.attachments) ? res.attachments : [];
+    const signature = attachments.find(a => a.kind === 'signature');
+    const validId = attachments.find(a => a.kind === 'valid_id');
+
+    const name = [res.first_name, res.middle_name, res.last_name].filter(Boolean).join(' ').trim() || ('Resident #' + res.id);
+
+    const renderAttachment = function (label, att) {
+        if (!att) {
+            return `
+                <div>
+                    <div class="text-xs font-bold text-gray-400 uppercase mb-1">${label}</div>
+                    <div class="border border-dashed border-gray-300 rounded-xl p-6 text-center text-gray-400">No ${label.toLowerCase()} uploaded.</div>
+                </div>`;
+        }
+        const dlUrl = CemboClear.attachmentUrl(att.id);
+        const inUrl = CemboClear.attachmentUrl(att.id, { inline: true });
+        return `
+            <div>
+                <div class="text-xs font-bold text-gray-700 uppercase mb-1">${label}</div>
+                <div class="border border-gray-200 rounded-xl overflow-hidden bg-white">
+                    <img src="${inUrl}" alt="${label}" class="w-full max-h-56 object-contain bg-white" onerror="attachmentPreviewFail(this, '${dlUrl}')" />
+                </div>
+                <div class="text-xs text-gray-400 mt-1">${att.file_name || ''}</div>
+            </div>`;
+    };
+
+    container.innerHTML = `
+        <div class="flex items-center justify-between border-b border-gray-100 pb-3">
+            <div>
+                <div class="text-lg font-bold text-gray-800">${name}</div>
+                <div class="text-xs text-gray-400">Control No: ${res.control_no || 'N/A'} &middot; ID: #${res.id}</div>
+            </div>
+            <span class="inline-flex px-3 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-bold capitalize">${res.registry_status || 'pending'}</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            ${renderAttachment('Signature', signature)}
+            ${renderAttachment('Valid ID', validId)}
+        </div>
+
+        <div class="flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+            <span>Confirm the uploaded signature and ID belong to this resident before marking their profile verified.</span>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-2">
+            <button type="button" onclick="closeVerifyModal()" class="px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700">Cancel</button>
+            <button onclick="confirmVerify(${res.id})" class="px-5 py-2 rounded-xl bg-emerald-600 text-white text-sm font-bold shadow-md hover:bg-emerald-700">Confirm &amp; Verify</button>
+        </div>
+    `;
+
+    openVerifyModal();
+};
+
+// Perform the actual verification after the admin confirms in the review modal.
+window.confirmVerify = async function (id) {
     try {
         await CemboClear.client().put('/residents/' + id + '/verify');
+        closeVerifyModal();
         await loadResidents();
         await loadDashboardStats();
     } catch (err) {
         showError(err.message || 'Failed to verify resident');
     }
-}
+};
 
 // Feature C — Certificates (GET /api/certificates, PUT approve/reject)
+let certCache = [];
 async function loadCertificates() {
     const body = document.getElementById('certificates-table-body');
     if (!body) return;
 
     try {
         const res = await CemboClear.client().get('/certificates');
-        const certs = (res && res.data) ? res.data : (Array.isArray(res) ? res : []);
+        certCache = (res && res.data) ? res.data : (Array.isArray(res) ? res : []);
+        const certs = certCache;
         if (certs.length === 0) {
             body.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-gray-500">No certificate applications found.</td></tr>';
             return;
@@ -526,8 +718,8 @@ async function loadCertificates() {
                     <td class="p-4"><span class="inline-flex px-3 py-1 rounded-full ${statusBg} text-xs font-bold uppercase">${c.status}</span></td>
                     <td class="p-4 text-right space-x-2">
                         ${c.status === 'pending' ? `
-                            <button onclick="approveCertificate(${c.id})" class="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-700">Approve</button>
-                            <button onclick="rejectCertificate(${c.id})" class="bg-rose-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-rose-700">Reject</button>
+                            <button onclick="reviewCertificate(${c.id})" class="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-700">Approve</button>
+                            <button onclick="reviewCertificate(${c.id}, true)" class="bg-rose-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-rose-700">Reject</button>
                         ` : '<span class="text-xs text-gray-400 font-semibold">Processed</span>'}
                     </td>
                 </tr>
@@ -538,9 +730,161 @@ async function loadCertificates() {
     }
 }
 
+// Central confirmation modal — reusable "Are you sure you want to do this?" dialog.
+function closeConfirmModal() {
+    const modal = document.getElementById('confirm-action-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+}
+
+window.openConfirmModal = function (opts) {
+    const modal = document.getElementById('confirm-action-modal');
+    if (!modal) return;
+    opts = opts || {};
+
+    const title = document.getElementById('confirm-action-title');
+    const msg = document.getElementById('confirm-action-message');
+    const btn = document.getElementById('confirm-action-btn');
+
+    if (title) title.textContent = opts.title || 'Are you sure?';
+    if (msg) msg.textContent = opts.message || 'Are you sure you want to do this?';
+    if (btn) {
+        btn.textContent = opts.confirmText || 'Confirm';
+        btn.className = 'px-5 py-2 rounded-xl text-white text-sm font-bold shadow-md ' +
+            (opts.danger ? 'bg-rose-600 hover:bg-rose-700' : 'bg-blue-600 hover:bg-blue-700');
+        btn.onclick = function () {
+            // Re-fetch the button callback each click in case the modal is reused.
+            closeConfirmModal();
+            if (typeof opts.onConfirm === 'function') opts.onConfirm();
+        };
+    }
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+};
+
+// Close + render signature/ID preview helper (shared with resident verify flow).
+function closeCertificateModal() {
+    const modal = document.getElementById('certificate-review-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+}
+
+// Review a pending certificate application before approving/rejecting.
+window.reviewCertificate = async function (id, rejectMode) {
+    const cert = (certCache || []).find(c => c.id === id);
+    if (!cert) {
+        showError('Certificate application not found.');
+        return;
+    }
+
+    const container = document.getElementById('certificate-review-content');
+    if (!container) return;
+
+    const name = cert.first_name ? `${cert.first_name} ${cert.last_name}`
+        : (cert.resident_name || 'Resident #' + cert.resident_id);
+
+    // Load the resident's uploaded signature / valid ID for identity review.
+    let attHtml = '';
+    try {
+        const res = await CemboClear.client().get('/residents/' + cert.resident_id);
+        const attachments = (res && Array.isArray(res.attachments)) ? res.attachments : [];
+        const signature = attachments.find(a => a.kind === 'signature');
+        const validId = attachments.find(a => a.kind === 'valid_id');
+        attHtml = renderVerifyAttachment('Signature', signature) + renderVerifyAttachment('Valid ID', validId);
+    } catch (e) {
+        attHtml = '<div class="text-xs text-gray-400">Could not load resident attachments.</div>';
+    }
+
+    const approveBtn = rejectMode
+        ? `<button onclick="confirmRejectCertificate(${cert.id})" class="px-5 py-2 rounded-xl bg-rose-600 text-white text-sm font-bold shadow-md hover:bg-rose-700">Reject Application</button>`
+        : `<button onclick="confirmApproveCertificate(${cert.id})" class="px-5 py-2 rounded-xl bg-emerald-600 text-white text-sm font-bold shadow-md hover:bg-emerald-700">Approve Application</button>`;
+
+    container.innerHTML = `
+        <div class="flex items-center justify-between border-b border-gray-100 pb-3">
+            <div>
+                <div class="text-lg font-bold text-gray-800">#CERT-${cert.id}</div>
+                <div class="text-xs text-gray-400">Applied ${cert.applied_at || 'N/A'}</div>
+            </div>
+            <span class="inline-flex px-3 py-1 rounded-full bg-yellow-100 text-yellow-700 text-xs font-bold capitalize">${cert.status || 'pending'}</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <div class="text-xs font-bold text-gray-700 uppercase mb-1">Resident</div>
+                <div class="text-sm font-semibold text-gray-800">${name}</div>
+                <div class="text-xs text-gray-400">Control No: ${cert.control_no || 'N/A'} &middot; ID: #${cert.resident_id}</div>
+            </div>
+            <div>
+                <div class="text-xs font-bold text-gray-700 uppercase mb-1">Purpose</div>
+                <div class="text-sm font-semibold text-gray-800">${cert.purpose || 'N/A'}</div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            ${attHtml}
+        </div>
+
+        <div class="flex justify-end gap-3 pt-2">
+            <button type="button" onclick="closeCertificateModal()" class="px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700">Cancel</button>
+            ${approveBtn}
+        </div>
+    `;
+
+    const modal = document.getElementById('certificate-review-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+};
+
+window.renderVerifyAttachment = function (label, att) {
+    if (!att) {
+        return `
+            <div>
+                <div class="text-xs font-bold text-gray-400 uppercase mb-1">${label}</div>
+                <div class="border border-dashed border-gray-300 rounded-xl p-6 text-center text-gray-400">No ${label.toLowerCase()} uploaded.</div>
+            </div>`;
+    }
+    const dlUrl = CemboClear.attachmentUrl(att.id);
+    const inUrl = CemboClear.attachmentUrl(att.id, { inline: true });
+    return `
+        <div>
+            <div class="text-xs font-bold text-gray-700 uppercase mb-1">${label}</div>
+            <div class="border border-gray-200 rounded-xl overflow-hidden bg-white">
+                <img src="${inUrl}" alt="${label}" class="w-full max-h-40 object-contain bg-white" onerror="attachmentPreviewFail(this, '${dlUrl}')" />
+            </div>
+        </div>`;
+};
+
+// Confirm-then-approve flow: ask first, then actually approve.
+window.confirmApproveCertificate = function (id) {
+    openConfirmModal({
+        title: 'Approve certificate?',
+        message: 'Are you sure you want to approve certificate #CERT-' + id + '? The resident will be notified.',
+        confirmText: 'Approve',
+        onConfirm: function () { approveCertificate(id); }
+    });
+};
+
+window.confirmRejectCertificate = function (id) {
+    openConfirmModal({
+        title: 'Reject certificate?',
+        message: 'Are you sure you want to reject certificate #CERT-' + id + '?',
+        confirmText: 'Reject',
+        danger: true,
+        onConfirm: function () { rejectCertificate(id); }
+    });
+};
+
 async function approveCertificate(id) {
     try {
         await CemboClear.client().put('/certificates/' + id + '/approve');
+        closeCertificateModal();
         await loadCertificates();
     } catch (err) {
         showError(err.message || 'Failed to approve certificate');
@@ -550,6 +894,7 @@ async function approveCertificate(id) {
 async function rejectCertificate(id) {
     try {
         await CemboClear.client().put('/certificates/' + id + '/reject');
+        closeCertificateModal();
         await loadCertificates();
     } catch (err) {
         showError(err.message || 'Failed to reject certificate');
@@ -595,39 +940,107 @@ async function loadRequests() {
     }
 }
 
+function closeRequestDetail() {
+    const modal = document.getElementById('request-detail-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+}
+
 function viewRequestDetail(reqId) {
     const req = cachedRequests.find(r => r.id === reqId);
-    const detailContainer = document.getElementById('request-detail-body');
+    const detailContainer = document.getElementById('request-detail-content');
     if (!req || !detailContainer) return;
 
+    const statusBg =
+        req.status === 'resolved' ? 'bg-emerald-100 text-emerald-700' :
+        req.status === 'closed'   ? 'bg-gray-200 text-gray-700' :
+        req.status === 'reviewed' ? 'bg-blue-100 text-blue-700' :
+                                    'bg-amber-100 text-amber-700';
+
+    // Build status-appropriate actions (staff workflows).
+    let actions = '';
+    if (req.status === 'pending_review') {
+        actions = `
+            <button onclick="confirmRequestStatus(${req.id}, 'reviewed')" class="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-bold shadow-md hover:bg-blue-700">Mark Reviewed</button>
+            <button onclick="confirmRequestStatus(${req.id}, 'closed')" class="px-4 py-2 rounded-xl bg-rose-600 text-white text-sm font-bold shadow-md hover:bg-rose-700">Close / Reject</button>
+        `;
+    } else if (req.status === 'reviewed') {
+        actions = `
+            <button onclick="confirmRequestStatus(${req.id}, 'resolved')" class="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-bold shadow-md hover:bg-emerald-700">Resolve</button>
+            <button onclick="confirmRequestStatus(${req.id}, 'closed')" class="px-4 py-2 rounded-xl bg-rose-600 text-white text-sm font-bold shadow-md hover:bg-rose-700">Close</button>
+        `;
+    } else {
+        actions = '<span class="text-xs text-gray-400 font-semibold">This concern is already processed.</span>';
+    }
+
     detailContainer.innerHTML = `
-        <div class="space-y-3 text-sm text-gray-700">
-            <div class="flex justify-between border-b border-gray-100 pb-2">
-                <span class="font-bold text-gray-900">Ticket ID:</span>
-                <span>${req.ticket_id || '#REQ-' + req.id}</span>
+        <div class="space-y-4">
+            <div class="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div>
+                    <div class="text-lg font-bold text-gray-800">${req.ticket_id || '#REQ-' + req.id}</div>
+                    <div class="text-xs text-gray-400">Submitted ${req.created_at || 'N/A'}</div>
+                </div>
+                <span class="inline-flex px-3 py-1 rounded-full ${statusBg} text-xs font-bold capitalize">${req.status}</span>
             </div>
-            <div class="flex justify-between border-b border-gray-100 pb-2">
-                <span class="font-bold text-gray-900">Submitter:</span>
-                <span>${req.resident_name || (req.first_name ? req.first_name + ' ' + req.last_name : 'Resident')} (${req.control_no || 'N/A'})</span>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <div class="text-xs font-bold text-gray-400 uppercase mb-1">Submitter</div>
+                    <div class="font-semibold text-gray-800">${req.resident_name || 'Resident'}</div>
+                    <div class="text-xs text-gray-400">Control No: ${req.control_no || 'N/A'}</div>
+                </div>
+                <div>
+                    <div class="text-xs font-bold text-gray-400 uppercase mb-1">Department / Case Type</div>
+                    <div class="font-semibold text-gray-800">${req.agency_name || 'N/A'}</div>
+                    <div class="text-xs text-gray-400">${req.request_type || 'General'}</div>
+                </div>
             </div>
-            <div class="flex justify-between border-b border-gray-100 pb-2">
-                <span class="font-bold text-gray-900">Department / Agency:</span>
-                <span>${req.agency_name || 'N/A'}</span>
+
+            <div>
+                <div class="text-xs font-bold text-gray-400 uppercase mb-1">Subject</div>
+                <div class="font-semibold text-gray-800">${req.subject || 'N/A'}</div>
             </div>
-            <div class="flex justify-between border-b border-gray-100 pb-2">
-                <span class="font-bold text-gray-900">Subject:</span>
-                <span>${req.subject || 'N/A'}</span>
+
+            <div>
+                <div class="text-xs font-bold text-gray-400 uppercase mb-1">Details / Concern</div>
+                <div class="text-gray-600 whitespace-pre-line">${req.details || 'No additional details provided.'}</div>
             </div>
-            <div class="flex justify-between border-b border-gray-100 pb-2">
-                <span class="font-bold text-gray-900">Status:</span>
-                <span class="capitalize font-semibold text-amber-600">${req.status}</span>
-            </div>
-            <div class="flex justify-between">
-                <span class="font-bold text-gray-900">Submitted At:</span>
-                <span>${req.created_at || 'N/A'}</span>
+
+            <div class="flex justify-end gap-3 border-t border-gray-100 pt-3">
+                <button type="button" onclick="closeRequestDetail()" class="px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700">Close</button>
+                ${actions}
             </div>
         </div>
     `;
+
+    const modal = document.getElementById('request-detail-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+}
+
+// Ask for confirmation, then set the request status (PUT /api/requests/{id}/status).
+window.confirmRequestStatus = function (reqId, status) {
+    openConfirmModal({
+        title: 'Update request status?',
+        message: 'Are you sure you want to mark this request as "' + status + '"?',
+        confirmText: status.charAt(0).toUpperCase() + status.slice(1),
+        danger: status === 'closed',
+        onConfirm: function () { setRequestStatus(reqId, status); }
+    });
+};
+
+async function setRequestStatus(reqId, status) {
+    try {
+        await CemboClear.client().put('/requests/' + reqId + '/status', { status: status });
+        closeRequestDetail();
+        await loadRequests();
+    } catch (err) {
+        showError(err.message || 'Failed to update request status');
+    }
 }
 
 // Feature F — Staff Transactions (GET /api/transactions, POST /api/transactions)
@@ -682,19 +1095,49 @@ async function loadTransactions(filterQuery = '') {
 
 // Feature G — Staff Mail & Notifications (GET /api/mail, GET /api/notifications, GET /api/audit-logs)
 let cachedMail = [];
-async function loadMail() {
+let currentMailFolder = 'inbox';
+let currentMailSearch = '';
+let mailSearchDebounceTimer = null;
+
+function getMailFolder() {
+    const el = document.getElementById('mail-folder-select');
+    return (el && el.value) ? el.value : 'inbox';
+}
+
+function getMailSearch() {
+    const el = document.getElementById('mail-search-input');
+    return el ? el.value : '';
+}
+
+async function loadMail(folder, search) {
     const container = document.getElementById('mail-list-container');
     const countHeader = document.getElementById('mail-inbox-header');
     if (!container) return;
 
-    try {
-        const res = await CemboClear.client().get('/mail');
-        cachedMail = (res && res.data) ? res.data : (Array.isArray(res) ? res : []);
+    folder = folder === undefined ? getMailFolder() : folder;
+    search = search === undefined ? getMailSearch() : search;
+    currentMailFolder = folder;
+    currentMailSearch = search;
 
-        if (countHeader) countHeader.textContent = `Inbox (${cachedMail.length})`;
+    try {
+        const res = await CemboClear.client().get('/mail?folder=' + encodeURIComponent(folder));
+        let mails = (res && res.data) ? res.data : [];
+        if (search.trim()) {
+            const q = search.trim().toLowerCase();
+            mails = mails.filter(m =>
+                String(m.sender_name || '').toLowerCase().includes(q) ||
+                String(m.sender_email || '').toLowerCase().includes(q) ||
+                String(m.subject || '').toLowerCase().includes(q) ||
+                String(m.body || '').toLowerCase().includes(q)
+            );
+        }
+        cachedMail = mails;
+
+        const folderLabel = folder === 'archived' ? 'Archived' : 'Inbox';
+        if (countHeader) countHeader.textContent = folderLabel + ' (' + cachedMail.length + ')';
 
         if (cachedMail.length === 0) {
-            container.innerHTML = '<div class="p-4 text-center text-gray-500 text-sm">No messages in inbox.</div>';
+            container.innerHTML = '<div class="p-4 text-center text-gray-500 text-sm">No ' + folderLabel.toLowerCase() + ' messages' + (search.trim() ? ' match your search' : '') + '.</div>';
             return;
         }
 
@@ -719,9 +1162,28 @@ async function loadMail() {
     }
 }
 
+// Archive (or restore) the currently selected message, then refresh the folder.
+window.archiveMail = async function () {
+    if (!currentMail) {
+        showError('Select a message to archive first.');
+        return;
+    }
+    const id = currentMail.id;
+    const archived = currentMailFolder === 'archived' ? 0 : 1;
+    try {
+        await CemboClear.client().put('/mail/' + id + '/archive', { archived: archived });
+        await loadMail();
+    } catch (err) {
+        showError(err.message || 'Failed to archive message');
+    }
+};
+
+let currentMail = null;
+
 function selectMailItem(id) {
     const mail = cachedMail.find(m => m.id === id);
     if (!mail) return;
+    currentMail = mail;
 
     const subjEl = document.getElementById('mail-subject');
     const senderEl = document.getElementById('mail-sender');
@@ -730,7 +1192,10 @@ function selectMailItem(id) {
     const readBtn = document.getElementById('mail-mark-read-btn');
 
     if (subjEl) subjEl.textContent = mail.subject || 'No Subject';
-    if (senderEl) senderEl.textContent = 'From ' + (mail.sender_name || 'Sender');
+    if (senderEl) {
+        const email = mail.sender_email ? ' <' + mail.sender_email + '>' : '';
+        senderEl.textContent = 'From ' + (mail.sender_name || 'Sender') + email;
+    }
     if (metaEl) metaEl.textContent = mail.created_at || '';
     if (bodyEl) bodyEl.textContent = mail.body || '';
     if (readBtn) {
@@ -743,6 +1208,49 @@ function selectMailItem(id) {
             }
         };
     }
+}
+
+// Open the compose modal pre-filled to reply to the currently selected message's sender.
+window.replyToMail = function () {
+    if (!currentMail) {
+        showError('Select a message to reply to first.');
+        return;
+    }
+
+    // The reply target is the original sender: they must be a staff OR resident.
+    let recipientId = null;
+    let recipientType = null;
+    if (currentMail.sender_staff_id) {
+        recipientId = currentMail.sender_staff_id;
+        recipientType = 'staff';
+    } else if (currentMail.sender_resident_id) {
+        recipientId = currentMail.sender_resident_id;
+        recipientType = 'resident';
+    }
+    if (!recipientId || !recipientType) {
+        showError('Cannot reply: unknown sender.');
+        return;
+    }
+
+    const searchEl = document.getElementById('mail-recipient-search');
+    const idEl = document.getElementById('mail-recipient-id');
+    const typeEl = document.getElementById('mail-recipient-type');
+    const subjEl = document.getElementById('mail-input-subject');
+    const bodyEl = document.getElementById('mail-input-body');
+
+    if (searchEl) searchEl.value = currentMail.sender_name || ('Recipient #' + recipientId);
+    if (idEl) idEl.value = recipientId;
+    if (typeEl) typeEl.value = recipientType;
+    if (subjEl) subjEl.value = (currentMail.subject ? 'Re: ' : '') + (currentMail.subject || '');
+    if (bodyEl) bodyEl.value = '';
+
+    // Open the compose modal (same pattern as the Compose button).
+    const modal = document.getElementById('compose-mail-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+    bodyEl && bodyEl.focus();
 }
 
 async function loadNotifications() {
@@ -783,7 +1291,8 @@ async function markNotificationRead(id) {
     } catch (e) {}
 }
 
-async function loadAuditLogs() {
+const AUDIT_LOG_PAGE_SIZE = 25;
+async function loadAuditLogs(page = 1) {
     const body = document.getElementById('audit-logs-table-body');
     if (!body) return;
 
@@ -793,30 +1302,65 @@ async function loadAuditLogs() {
             body.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-gray-500">Audit logs are restricted to System Administrators.</td></tr>';
             return;
         }
-        const res = await CemboClear.client().get('/audit-logs');
+        const res = await CemboClear.client().get('/audit-logs?page=' + page + '&limit=' + AUDIT_LOG_PAGE_SIZE);
         const logs = (res && res.data) ? res.data : (Array.isArray(res) ? res : []);
 
         if (logs.length === 0) {
             body.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-gray-500">No audit logs recorded.</td></tr>';
-            return;
+        } else {
+            body.innerHTML = logs.map(l => `
+                <tr>
+                    <td class="py-4 px-4">${l.created_at || 'N/A'}</td>
+                    <td class="py-4 px-4 font-semibold">${l.actor_name || 'Staff #' + (l.staff_id || 'Unknown')}</td>
+                    <td class="py-4 px-4">${l.action || 'N/A'}</td>
+                    <td class="py-4 px-4">${l.ip_address || '127.0.0.1'}</td>
+                    <td class="py-4 px-4 text-emerald-600 font-semibold capitalize">${l.security_status || 'Authorized'}</td>
+                </tr>
+            `).join('');
         }
 
-        body.innerHTML = logs.map(l => `
-            <tr>
-                <td class="py-4 px-4">${l.created_at || 'N/A'}</td>
-                <td class="py-4 px-4 font-semibold">${l.actor_name || 'Staff #' + (l.staff_id || 'Unknown')}</td>
-                <td class="py-4 px-4">${l.action || 'N/A'}</td>
-                <td class="py-4 px-4">${l.ip_address || '127.0.0.1'}</td>
-                <td class="py-4 px-4 text-emerald-600 font-semibold capitalize">${l.security_status || 'Authorized'}</td>
-            </tr>
-        `).join('');
+        // Render pagination controls.
+        const pagEl = document.getElementById('audit-logs-pagination');
+        if (pagEl) {
+            const total = (res && res.total) ? parseInt(res.total, 10) : 0;
+            const limit = (res && res.limit) ? parseInt(res.limit, 10) : AUDIT_LOG_PAGE_SIZE;
+            const totalPages = Math.max(1, Math.ceil(total / limit));
+            const current = Math.min(page, totalPages);
+
+            let btns = '';
+            if (current > 1) {
+                btns += `<button onclick="loadAuditLogs(${current - 1})" class="w-9 h-9 rounded-full bg-gray-200 text-gray-600 hover:bg-gray-300">&larr;</button>`;
+            }
+            const start = Math.max(1, current - 2);
+            const end = Math.min(totalPages, current + 2);
+            for (let i = start; i <= end; i++) {
+                const active = i === current ? 'bg-blue-800 text-white font-bold' : 'bg-gray-200 text-gray-600';
+                btns += `<button onclick="loadAuditLogs(${i})" class="w-9 h-9 rounded-full ${active}">${i}</button>`;
+            }
+            if (current < totalPages) {
+                btns += `<button onclick="loadAuditLogs(${current + 1})" class="w-9 h-9 rounded-full bg-gray-200 text-gray-600 hover:bg-gray-300">&rarr;</button>`;
+            }
+
+            if (totalPages > 1) {
+                pagEl.innerHTML = btns;
+            } else {
+                pagEl.innerHTML = `<span class="text-xs text-gray-400">Page ${current} of ${totalPages}</span>`;
+            }
+        }
     } catch (err) {
         showError(err.message || 'Failed to load audit logs');
     }
 }
 
 // Feature H — Staff Management (GET/POST /api/staff, PUT /api/staff/{id}/status)
-async function loadStaff() {
+let staffSearchDebounceTimer = null;
+function getStaffSearch() {
+    const el = document.getElementById('staff-search-input');
+    return el ? el.value : '';
+}
+
+const STAFF_PAGE_SIZE = 25;
+async function loadStaff(page = 1, query = '') {
     const body = document.getElementById('staff-table-body');
     if (!body) return;
 
@@ -828,31 +1372,62 @@ async function loadStaff() {
         return;
     }
 
+    query = query === undefined ? getStaffSearch() : query;
+
     try {
-        const res = await CemboClear.client().get('/staff');
-        const staff = (res && res.data) ? res.data : (Array.isArray(res) ? res : []);
+        const qs = '?page=' + page + '&limit=' + STAFF_PAGE_SIZE + (query.trim() ? '&q=' + encodeURIComponent(query.trim()) : '');
+        const res = await CemboClear.client().get('/staff' + qs);
+        const staff = (res && res.data) ? res.data : [];
 
         if (staff.length === 0) {
             body.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-gray-500">No staff accounts found.</td></tr>';
-            return;
+        } else {
+            body.innerHTML = staff.map(s => {
+                const fullName = [s.first_name, s.middle_name, s.last_name].filter(Boolean).join(' ') || ('Staff #' + s.id);
+                const statusBg = s.status === 'inactive' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700';
+                return `
+                    <tr class="bg-white">
+                        <td class="p-4 font-semibold text-gray-800">${fullName}</td>
+                        <td class="p-4 text-gray-600">${s.email || 'N/A'}</td>
+                        <td class="p-4 text-gray-600">${s.position || 'N/A'}</td>
+                        <td class="p-4 text-gray-600">${s.branch || 'N/A'}</td>
+                        <td class="p-4"><span class="inline-flex px-3 py-1 rounded-full ${statusBg} text-xs font-bold uppercase">${s.status || 'active'}</span></td>
+                        <td class="p-4 text-right">
+                            <button onclick="toggleStaffStatus(${s.id}, '${s.status || 'active'}')" class="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-100">${s.status === 'inactive' ? 'Activate' : 'Deactivate'}</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
         }
 
-        body.innerHTML = staff.map(s => {
-            const fullName = [s.first_name, s.middle_name, s.last_name].filter(Boolean).join(' ') || ('Staff #' + s.id);
-            const statusBg = s.status === 'inactive' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700';
-            return `
-                <tr class="bg-white">
-                    <td class="p-4 font-semibold text-gray-800">${fullName}</td>
-                    <td class="p-4 text-gray-600">${s.email || 'N/A'}</td>
-                    <td class="p-4 text-gray-600">${s.position || 'N/A'}</td>
-                    <td class="p-4 text-gray-600">${s.branch || 'N/A'}</td>
-                    <td class="p-4"><span class="inline-flex px-3 py-1 rounded-full ${statusBg} text-xs font-bold uppercase">${s.status || 'active'}</span></td>
-                    <td class="p-4 text-right">
-                        <button onclick="toggleStaffStatus(${s.id})" data-id="${s.id}" data-status="${s.status || 'active'}" class="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-100">${s.status === 'inactive' ? 'Activate' : 'Deactivate'}</button>
-                    </td>
-                </tr>
-            `;
-        }).join('');
+        // Render pagination controls.
+        const pagEl = document.getElementById('staff-pagination');
+        if (pagEl) {
+            const total = (res && res.total) ? parseInt(res.total, 10) : 0;
+            const limit = (res && res.limit) ? parseInt(res.limit, 10) : STAFF_PAGE_SIZE;
+            const totalPages = Math.max(1, Math.ceil(total / limit));
+            const current = Math.min(page, totalPages);
+
+            let btns = '';
+            if (current > 1) {
+                btns += `<button onclick="loadStaff(${current - 1})" class="w-9 h-9 rounded-full bg-gray-200 text-gray-600 hover:bg-gray-300">&larr;</button>`;
+            }
+            const start = Math.max(1, current - 2);
+            const end = Math.min(totalPages, current + 2);
+            for (let i = start; i <= end; i++) {
+                const active = i === current ? 'bg-blue-800 text-white font-bold' : 'bg-gray-200 text-gray-600';
+                btns += `<button onclick="loadStaff(${i})" class="w-9 h-9 rounded-full ${active}">${i}</button>`;
+            }
+            if (current < totalPages) {
+                btns += `<button onclick="loadStaff(${current + 1})" class="w-9 h-9 rounded-full bg-gray-200 text-gray-600 hover:bg-gray-300">&rarr;</button>`;
+            }
+
+            if (totalPages > 1) {
+                pagEl.innerHTML = btns;
+            } else {
+                pagEl.innerHTML = `<span class="text-xs text-gray-400">Page ${current} of ${totalPages}</span>`;
+            }
+        }
     } catch (err) {
         body.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-gray-500">Unable to load staff. Restricted to System Administrators.</td></tr>';
     }
@@ -867,14 +1442,20 @@ function openCreateStaffModal() {
     openModal('create-staff-modal');
 }
 
-async function toggleStaffStatus(id) {
+// Preserve current staff state (page + search) when reloading after an action.
+function reloadStaff() {
+    const inp = document.getElementById('staff-search-input');
+    const q = inp ? inp.value : '';
+    // Derive page from the active pagination button (default 1).
+    loadStaff(1, q);
+}
+
+async function toggleStaffStatus(id, currentStatus) {
+    const current = currentStatus || 'active';
+    const target = current === 'inactive' ? 'active' : 'inactive';
     try {
-        // Status button carries the current status so we can derive the target.
-        const btn = document.querySelector('#staff-table-body button[data-id="' + id + '"]');
-        const current = btn ? btn.getAttribute('data-status') : 'active';
-        const target = current === 'inactive' ? 'active' : 'inactive';
         await CemboClear.client().put('/staff/' + id + '/status', { status: target });
-        await loadStaff();
+        reloadStaff();
     } catch (err) {
         showError(err.message || 'Failed to update staff status');
     }
@@ -995,8 +1576,15 @@ document.addEventListener('DOMContentLoaded', async function () {
         rbiSearch.addEventListener('input', function () {
             clearTimeout(searchDebounceTimer);
             searchDebounceTimer = setTimeout(() => {
-                loadResidents(1, this.value);
+                loadResidents(1, this.value, getRbiStatusFilter());
             }, 300);
+        });
+    }
+
+    const rbiStatusFilter = document.getElementById('rbi-status-filter');
+    if (rbiStatusFilter) {
+        rbiStatusFilter.addEventListener('change', function () {
+            loadResidents(1, rbiSearch ? rbiSearch.value : '', this.value);
         });
     }
 
@@ -1008,11 +1596,104 @@ document.addEventListener('DOMContentLoaded', async function () {
         });
     }
 
+    // Data Freshness Audit search (live debounced search + search box + Retrieve Data button)
+    const freshnessBtn = document.getElementById('freshness-search-btn');
+    const freshnessInput = document.getElementById('freshness-search-input');
+    if (freshnessBtn && freshnessInput) {
+        let freshnessDebounceTimer = null;
+        const runFreshnessSearch = function () {
+            loadFreshnessAudit(freshnessInput.value);
+        };
+        freshnessBtn.addEventListener('click', runFreshnessSearch);
+        freshnessInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                clearTimeout(freshnessDebounceTimer);
+                runFreshnessSearch();
+            }
+        });
+        freshnessInput.addEventListener('input', function () {
+            clearTimeout(freshnessDebounceTimer);
+            freshnessDebounceTimer = setTimeout(runFreshnessSearch, 300);
+        });
+    }
+
     const addTxForm = document.getElementById('add-transaction-form');
     if (addTxForm) {
+        const txResidentSearch = document.getElementById('tx-resident-search');
+        const txResidentResults = document.getElementById('tx-resident-results');
+        const txResidentIdEl = document.getElementById('tx-resident-id');
+        let txResidentTimer = null;
+
+        // Live resident search (debounced 300ms) using GET /api/residents/search
+        if (txResidentSearch) {
+            txResidentSearch.addEventListener('input', function () {
+                clearTimeout(txResidentTimer);
+                const q = this.value.trim();
+                if (!q) {
+                    txResidentResults.classList.add('hidden');
+                    txResidentResults.innerHTML = '';
+                    txResidentIdEl.value = '';
+                    return;
+                }
+                txResidentTimer = setTimeout(async () => {
+                    try {
+                        const res = await CemboClear.client().get('/residents/search?q=' + encodeURIComponent(q));
+                        const residents = (res && res.data) ? res.data : [];
+                        if (residents.length === 0) {
+                            txResidentResults.innerHTML = '<div class="px-4 py-3 text-sm text-gray-400">No residents found.</div>';
+                            txResidentResults.classList.remove('hidden');
+                            return;
+                        }
+                        txResidentResults.innerHTML = residents.map(r => {
+                            const initials = `${(r.first_name || '?')[0]}${(r.last_name || '?')[0]}`.toUpperCase();
+                            const name = [r.first_name, r.middle_name, r.last_name]
+                                .filter(Boolean)
+                                .join(' ')
+                                .replace(/\s+/g, ' ')
+                                .trim();
+                            const sub = r.control_no ? ('Control #' + r.control_no) : ('Resident #' + r.id);
+                            return `
+                                <div class="tx-resident-option flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-blue-50" data-id="${r.id}" data-name="${name}" data-sub="${sub}">
+                                    <div class="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold text-xs">${initials}</div>
+                                    <div class="flex-1">
+                                        <div class="text-sm font-semibold text-gray-800">${name}</div>
+                                        <div class="text-xs text-gray-400">${sub}</div>
+                                    </div>
+                                </div>`;
+                        }).join('');
+                        txResidentResults.classList.remove('hidden');
+                    } catch (err) {
+                        txResidentResults.innerHTML = '<div class="px-4 py-3 text-sm text-gray-400">Search failed.</div>';
+                        txResidentResults.classList.remove('hidden');
+                    }
+                }, 300);
+            });
+
+            // Select a resident: fill hidden id + lock the input to the chosen name
+            txResidentResults.addEventListener('click', function (e) {
+                const opt = e.target.closest('.tx-resident-option');
+                if (!opt) return;
+                txResidentIdEl.value = opt.getAttribute('data-id');
+                txResidentSearch.value = opt.getAttribute('data-name');
+                txResidentResults.classList.add('hidden');
+                txResidentResults.innerHTML = '';
+            });
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function (e) {
+                if (!txResidentSearch.contains(e.target) && !txResidentResults.contains(e.target)) {
+                    txResidentResults.classList.add('hidden');
+                }
+            });
+        }
+
         addTxForm.addEventListener('submit', async function (e) {
             e.preventDefault();
-            const resId = document.getElementById('tx-resident-id')?.value;
+            const resId = txResidentIdEl?.value;
+            if (!resId) {
+                showError('Please select a resident from the search results.');
+                return;
+            }
             const desc = document.getElementById('tx-description')?.value;
             const amt = document.getElementById('tx-amount')?.value;
             try {
@@ -1023,6 +1704,9 @@ document.addEventListener('DOMContentLoaded', async function () {
                 });
                 closeModal('add-transaction-modal');
                 addTxForm.reset();
+                txResidentIdEl.value = '';
+                txResidentResults.classList.add('hidden');
+                txResidentResults.innerHTML = '';
                 await loadTransactions();
             } catch (err) {
                 showError(err.message || 'Failed to create transaction');
@@ -1129,6 +1813,30 @@ document.addEventListener('DOMContentLoaded', async function () {
         });
     }
 
+    // Mail folder selector + search + archive toolbar
+    const mailFolderSelect = document.getElementById('mail-folder-select');
+    const mailArchiveBtn = document.getElementById('mail-archive-btn');
+    const mailSearchInput = document.getElementById('mail-search-input');
+
+    if (mailFolderSelect) {
+        mailFolderSelect.addEventListener('change', function () {
+            loadMail(this.value);
+        });
+    }
+
+    if (mailArchiveBtn) {
+        mailArchiveBtn.addEventListener('click', archiveMail);
+    }
+
+    if (mailSearchInput) {
+        mailSearchInput.addEventListener('input', function () {
+            clearTimeout(mailSearchDebounceTimer);
+            mailSearchDebounceTimer = setTimeout(() => {
+                loadMail();
+            }, 300);
+        });
+    }
+
     // Feature H — Create staff account form
     const createStaffForm = document.getElementById('create-staff-form');
     if (createStaffForm) {
@@ -1146,10 +1854,21 @@ document.addEventListener('DOMContentLoaded', async function () {
                 await CemboClear.client().post('/staff', payload);
                 closeModal('create-staff-modal');
                 createStaffForm.reset();
-                await loadStaff();
+                reloadStaff();
             } catch (err) {
                 showError(err.message || 'Failed to create staff account');
             }
+        });
+    }
+
+    // Staff search (debounced)
+    const staffSearch = document.getElementById('staff-search-input');
+    if (staffSearch) {
+        staffSearch.addEventListener('input', function () {
+            clearTimeout(staffSearchDebounceTimer);
+            staffSearchDebounceTimer = setTimeout(() => {
+                loadStaff(1, this.value);
+            }, 300);
         });
     }
 

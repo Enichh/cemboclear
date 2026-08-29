@@ -8,6 +8,7 @@ use App\Core\Response;
 use App\Core\Auth;
 use App\Core\RateLimiter;
 use App\Core\PhoneNormalizer;
+use App\Core\Logger;
 
 class ResidentAccountCreationController
 {
@@ -25,13 +26,24 @@ class ResidentAccountCreationController
 
         $input = json_decode(file_get_contents('php://input'), true) ?? [];
 
+        // Normalize what the backend relies on for storage & uniqueness checks
+        // so the stored data matches what was validated and is case-consistent.
+        if (isset($input['email']) && is_string($input['email'])) {
+            $input['email'] = strtolower(trim($input['email']));
+        }
+        foreach (['first_name', 'middle_name', 'last_name'] as $nameField) {
+            if (isset($input[$nameField]) && is_string($input[$nameField])) {
+                $input[$nameField] = trim($input[$nameField]);
+            }
+        }
+
         // Strict Signup Validation via SignupValidator (SRP)
         $errors = SignupValidator::validate($input);
         if (!empty($errors)) {
             Response::error(implode(' ', $errors), 422);
         }
 
-        $email = trim($input['email']);
+        $email = $input['email'];
         $password = $input['password'];
         $rawPhone = trim((string)($input['phone'] ?? ''));
         $normalizedPhone = PhoneNormalizer::toNational($rawPhone);
@@ -45,15 +57,30 @@ class ResidentAccountCreationController
             Response::error('Email is already registered.', 409);
         }
 
+        // Check if the phone is already taken by another resident registration.
+        // Phones are matched via normalized search variations so the same number
+        // entered in different formats is still detected.
+        $phoneVariations = PhoneNormalizer::getVariations($rawPhone);
+        if (!empty($phoneVariations)) {
+            $phoneIn = implode(',', array_fill(0, count($phoneVariations), '?'));
+            $phoneExists = $this->db->query(
+                'SELECT id FROM residents WHERE phone IN (' . $phoneIn . ') LIMIT 1',
+                $phoneVariations
+            )->fetch();
+            if ($phoneExists) {
+                Response::error('This phone number is already registered.', 409);
+            }
+        }
+
         $this->db->execute(
             'INSERT INTO residents (email, password_hash, first_name, middle_name, last_name, suffix, phone, gender, birthdate)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 $email,
                 password_hash($password, PASSWORD_DEFAULT),
-                trim($input['first_name']),
+                $input['first_name'],
                 $input['middle_name'] ?? null,
-                trim($input['last_name']),
+                $input['last_name'],
                 $input['suffix'] ?? null,
                 $normalizedPhone,
                 strtolower(trim($input['gender'] ?? '')),
@@ -71,14 +98,15 @@ class ResidentAccountCreationController
 
         if (Auth::type() === 'staff') {
             $requests = $this->db->query(
-                'SELECT r.id, r.ticket_id, r.resident_id,
+                'SELECT r.id, r.ticket_id, r.resident_id, r.subject, r.details, r.status, r.created_at,
                         CONCAT(res.first_name, " ", res.last_name) AS resident_name,
                         res.control_no,
                         a.name AS agency_name,
-                        r.subject, r.status, r.created_at
+                        rt.name AS request_type
                  FROM requests r
                  JOIN residents res ON res.id = r.resident_id
                  JOIN agencies a ON a.id = r.agency_id
+                 LEFT JOIN request_types rt ON rt.id = r.request_type_id
                  ORDER BY r.created_at DESC'
             )->fetchAll();
             foreach ($requests as &$req) {
@@ -148,6 +176,37 @@ class ResidentAccountCreationController
         ], 201);
     }
 
+    /** PUT /api/requests/{id}/status — Update a request's status (staff only) */
+    public function updateStatus(string $id): void
+    {
+        Auth::requireRole('staff');
+
+        $requestId = (int)$id;
+        $existing = $this->db->query('SELECT id FROM requests WHERE id = ?', [$requestId])->fetch();
+        if (!$existing) {
+            Response::notFound('Request not found');
+        }
+
+        $input = json_decode(file_get_contents('php://input'), true) ?? [];
+        $status = $input['status'] ?? '';
+        $allowed = ['pending_review', 'reviewed', 'resolved', 'closed'];
+        if (!in_array($status, $allowed, true)) {
+            Response::error('Status must be one of: ' . implode(', ', $allowed), 422);
+        }
+
+        $this->db->execute(
+            'UPDATE requests SET status = ? WHERE id = ?',
+            [$status, $requestId]
+        );
+
+        (new Logger($this->db))->activity(
+            'Set request #' . $requestId . ' status to ' . $status,
+            Auth::id()
+        );
+
+        Response::json(['message' => 'Request status updated']);
+    }
+
     /** GET /api/attachments/{id} — Download an attachment */
     public function downloadAttachment(string $id): void
     {
@@ -178,6 +237,24 @@ class ResidentAccountCreationController
         $fullPath = storage_path('uploads/' . $attachment['file_path']);
         if (!file_exists($fullPath)) {
             Response::notFound('File not found on disk');
+        }
+
+        // Inline serving (e.g. <img src=".../attachments/{id}?inline=1">): render
+        // image files directly instead of forcing a download. Staff-only auth is
+        // already enforced above.
+        $inline = !empty($_GET['inline']);
+        $mime = null;
+        if ($inline) {
+            $finfo = new \finfo(FILEINFO_MIME_TYPE);
+            $mime = $finfo->file($fullPath);
+            if ($mime && strpos($mime, 'image/') === 0) {
+                header('Content-Type: ' . $mime);
+                header('Content-Disposition: inline; filename="' . $attachment['file_path'] . '"');
+                header('Content-Length: ' . filesize($fullPath));
+                header('Cache-Control: private, max-age=3600');
+                readfile($fullPath);
+                exit;
+            }
         }
 
         // Sanitize filename to prevent header injection and traversal

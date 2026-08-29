@@ -344,6 +344,115 @@ test('SignupValidator rejects weak password', function () {
     assert_true(!empty($errs));
 });
 
+test('SignupValidator rejects password longer than the 72-byte bcrypt limit', function () {
+    $longPw = 'A1!' . str_repeat('x', 80); // well over 72 bytes
+    $errs = SignupValidator::validate([
+        'first_name' => 'Juan',
+        'last_name' => 'Dela Cruz',
+        'email' => 'juan@example.com',
+        'phone' => '+63 | 917 123 4567',
+        'birthdate' => '1995-05-15',
+        'gender' => 'male',
+        'password' => $longPw
+    ]);
+    assert_true(!empty($errs), 'Over-length password should be rejected (bcrypt truncation guard)');
+    assert_true(in_array('Password must not exceed 72 characters.', $errs, true));
+});
+
+test('SignupValidator accepts password of up to 72 bytes', function () {
+    $pw = 'A1!' . str_repeat('x', 68); // 72 bytes total (ASCII)
+    $errs = SignupValidator::validate([
+        'first_name' => 'Juan',
+        'last_name' => 'Dela Cruz',
+        'email' => 'juan@example.com',
+        'phone' => '+63 | 917 123 4567',
+        'birthdate' => '1995-05-15',
+        'gender' => 'male',
+        'password' => $pw
+    ]);
+    assert_true(empty($errs), '72-byte password should be accepted');
+});
+
+test('SignupValidator accepts case-insensitive email but normalizes to lowercase', function () {
+    $errs = SignupValidator::validate([
+        'first_name' => 'Juan',
+        'last_name' => 'Dela Cruz',
+        'email' => 'JUAN@Example.COM',
+        'phone' => '+63 | 917 123 4567',
+        'birthdate' => '1995-05-15',
+        'gender' => 'male',
+        'password' => 'StrongP@ss1'
+    ]);
+    assert_true(empty($errs), 'Valid email should pass regardless of case');
+});
+
+test('SignupValidator rejects email longer than 255 chars', function () {
+    $errs = SignupValidator::validate([
+        'first_name' => 'Juan',
+        'last_name' => 'Dela Cruz',
+        'email' => str_repeat('a', 240) . '@example.com',
+        'phone' => '+63 | 917 123 4567',
+        'birthdate' => '1995-05-15',
+        'gender' => 'male',
+        'password' => 'StrongP@ss1'
+    ]);
+    assert_true(!empty($errs));
+});
+
+test('SignupValidator rejects birthdate before 1900', function () {
+    $errs = SignupValidator::validate([
+        'first_name' => 'Juan',
+        'last_name' => 'Dela Cruz',
+        'email' => 'juan@example.com',
+        'phone' => '+63 | 917 123 4567',
+        'birthdate' => '1880-01-01',
+        'gender' => 'male',
+        'password' => 'StrongP@ss1'
+    ]);
+    assert_true(!empty($errs));
+});
+
+test('SignupValidator rejects malformed phone', function () {
+    $errs = SignupValidator::validate([
+        'first_name' => 'Juan',
+        'last_name' => 'Dela Cruz',
+        'email' => 'juan@example.com',
+        'phone' => '12345',
+        'birthdate' => '1995-05-15',
+        'gender' => 'male',
+        'password' => 'StrongP@ss1'
+    ]);
+    assert_true(!empty($errs));
+});
+
+test('SignupValidator accepts a single middle initial', function () {
+    $errs = SignupValidator::validate([
+        'first_name' => 'Juan',
+        'middle_name' => 'M.',
+        'last_name' => 'Dela Cruz',
+        'email' => 'juan@example.com',
+        'phone' => '+63 | 917 123 4567',
+        'birthdate' => '1995-05-15',
+        'gender' => 'male',
+        'password' => 'StrongP@ss1'
+    ]);
+    assert_true(empty($errs), 'Single middle initial (with/without period) should pass');
+});
+
+test('SignupValidator rejects a full middle name as the middle initial field', function () {
+    $errs = SignupValidator::validate([
+        'first_name' => 'Juan',
+        'middle_name' => 'Miguelito',
+        'last_name' => 'Dela Cruz',
+        'email' => 'juan@example.com',
+        'phone' => '+63 | 917 123 4567',
+        'birthdate' => '1995-05-15',
+        'gender' => 'male',
+        'password' => 'StrongP@ss1'
+    ]);
+    assert_true(!empty($errs), 'Multi-character middle name should be rejected (field is a single initial)');
+});
+
 // ─── Summary ─────────────────────────────────────────────────────────────
 echo "\n=== Results: {$passed} passed, {$failed} failed ===\n";
 

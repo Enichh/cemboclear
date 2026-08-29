@@ -192,15 +192,15 @@
                 
                 <div class="form-group">
                     <label class="section-label">Name</label>
-                    <input type="text" name="first_name" class="input-field" placeholder="First Name" required>
-                    <input type="text" name="middle_name" class="input-field" placeholder="M.I Name">
-                    <input type="text" name="last_name" class="input-field" placeholder="Last Name" required>
+                    <input type="text" name="first_name" class="input-field" placeholder="First Name" maxlength="50" required>
+                    <input type="text" name="middle_name" class="input-field" placeholder="Middle Initial" maxlength="2">
+                    <input type="text" name="last_name" class="input-field" placeholder="Last Name" maxlength="50" required>
                 </div>
 
                 <div class="form-group">
                     <label class="section-label">Birthdate</label>
                     <div class="select-wrapper date-wrapper">
-                        <input type="text" name="birthdate" class="input-field" placeholder="mm/dd/yyyy" onfocus="(this.type='date')" onblur="if(!this.value)this.type='text'" required style="width: 150px;">
+                        <input type="date" name="birthdate" class="input-field" max="" required style="width: 170px;">
                     </div>
                 </div>
 
@@ -218,7 +218,7 @@
 
                 <div class="form-group">
                     <label class="section-label">Email</label>
-                    <input type="email" name="email" class="input-field" placeholder="Email" required>
+                    <input type="email" name="email" class="input-field" placeholder="Email" maxlength="255" required>
                 </div>
 
                 <div class="form-group">
@@ -244,6 +244,18 @@
     <script src="api-client.js"></script>
     <script src="assets/js/signup-validator.js"></script>
     <script>
+        // Limit the native date picker so future dates cannot be chosen.
+        (function () {
+            const bd = document.querySelector('[name="birthdate"]');
+            if (bd) {
+                const t = new Date();
+                const y = t.getFullYear();
+                const m = String(t.getMonth() + 1).padStart(2, '0');
+                const d = String(t.getDate()).padStart(2, '0');
+                bd.setAttribute('max', y + '-' + m + '-' + d);
+            }
+        })();
+
         document.getElementById('signupForm')?.addEventListener('submit', async function (e) {
             e.preventDefault();
             const errorBanner = document.getElementById('signup-error');
@@ -258,6 +270,13 @@
                 const el = form.querySelector('[name="' + name + '"]');
                 if (el) payload[name] = el.value;
             });
+
+            // Normalize on the client so what is submitted matches what is stored
+            // (keeps frontend and backend rules in lock-step).
+            ['first_name', 'middle_name', 'last_name'].forEach(function (f) {
+                if (typeof payload[f] === 'string') payload[f] = payload[f].trim();
+            });
+            if (typeof payload.email === 'string') payload.email = payload.email.trim().toLowerCase();
 
             // Strip decorative "+63 | " prefix
             if (typeof payload.phone === 'string') {

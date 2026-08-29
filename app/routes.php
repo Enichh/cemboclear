@@ -44,6 +44,7 @@ $router->get('/api/certificate-purposes',           [App\Features\CertificateGen
 $router->post('/api/signup',             [App\Features\ResidentAccountCreation\ResidentAccountCreationController::class, 'signup']);
 $router->get('/api/requests',            [App\Features\ResidentAccountCreation\ResidentAccountCreationController::class, 'myRequests']);
 $router->post('/api/requests',           [App\Features\ResidentAccountCreation\ResidentAccountCreationController::class, 'submitRequest']);
+$router->put('/api/requests/{id}/status', [App\Features\ResidentAccountCreation\ResidentAccountCreationController::class, 'updateStatus']);
 $router->get('/api/attachments/{id}',    [App\Features\ResidentAccountCreation\ResidentAccountCreationController::class, 'downloadAttachment']);
 
 // ─── 6. Appointment Scheduling ───────────────────────────────────────────
@@ -76,6 +77,7 @@ $router->post('/api/upload',                    [App\Features\FileUploads\FileUp
 $router->get('/api/mail',                       [App\Features\MailBox\MailBoxController::class, 'index']);
 $router->post('/api/mail',                      [App\Features\MailBox\MailBoxController::class, 'send']);
 $router->put('/api/mail/{id}/read',             [App\Features\MailBox\MailBoxController::class, 'markRead']);
+$router->put('/api/mail/{id}/archive',          [App\Features\MailBox\MailBoxController::class, 'archive']);
 $router->get('/api/mail/recipients/search',     [App\Features\MailBox\MailBoxController::class, 'searchRecipients']);
 
 // ─── Notifications ───────────────────────────────────────────────────────

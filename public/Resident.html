@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CemboClear Resident Dashboard</title>
-    <link rel="stylesheet" href="assets/css/Resident.css?v=3" />
+    <link rel="stylesheet" href="assets/css/Resident.css?v=5" />
 </head>
 <body>
     <!-- Inline Error Region Banner -->
@@ -205,7 +205,7 @@
                             <span class="input-sublabel">( Civil Status )</span>
                         </div>
                     </div>
-                    <div class="form-grid-row">
+                    <div class="form-grid-row" style="grid-column: span 3;">
                         <div class="form-input-container" style="grid-column: span 3;"><input type="text" id="info-address" name="address" placeholder="House Address" required /><span class="input-sublabel">( Residence Address )</span></div>
                         <div class="form-input-container"><input type="text" id="info-citizenship" name="citizenship" placeholder="Citizenship" /><span class="input-sublabel">( Citizenship )</span></div>
                     </div>
@@ -246,7 +246,7 @@
                                     <span class="sig-status-dot"></span>
                                     <span id="sig-status-text">Awaiting signature</span>
                                 </div>
-                                <button type="button" class="sig-btn-clear" onclick="clearSignatureCanvas()">
+                                <button type="button" class="sig-btn-clear" onclick="clearSignatureCanvas() boundary">
                                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-right:4px;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>Clear Canvas
                                 </button>
                             </div>
@@ -309,8 +309,7 @@
                 <h2 class="view-title">Mail Box</h2>
                 <div class="mailbox-controls">
                     <div class="mail-actions-left">
-                        <button class="mail-btn" type="button">Archive</button>
-                        <select class="mail-btn"><option>None</option></select>
+                        <button class="mail-btn" type="button" onclick="openComposeMail()" style="background:#00469b; border-color:#00469b; color:#fff; font-weight:700;">Compose</button>
                     </div>
                     <div class="mail-search-bar">
                         <input type="text" placeholder="Search mail" />
@@ -340,6 +339,7 @@
                         </div>
                         <div class="mail-detail-actions">
                             <button type="button" id="resident-mail-read-btn">Mark as Read</button>
+                            <button type="button" onclick="replyToResidentMail()">Reply</button>
                         </div>
                     </div>
                 </div>
@@ -544,7 +544,43 @@
         </div>
     </div>
 
+    <!-- Compose Mail Modal -->
+    <div id="compose-mail-modal" class="complaint-modal">
+        <div class="complaint-modal-panel" style="max-width:560px;">
+            <div class="complaint-modal-header">
+                <div>
+                    <h3 class="complaint-modal-title">Compose Message</h3>
+                    <p class="complaint-modal-subtitle">Send a message to a barangay office or staff member.</p>
+                </div>
+                <button type="button" class="complaint-close-btn" onclick="closeComposeMail()">&times;</button>
+            </div>
+            <form class="complaint-form" id="compose-mail-form" onsubmit="sendResidentMail(event)">
+                <div class="complaint-field-group">
+                    <label for="resident-mail-recipient-search">Recipient (Barangay Office / Staff)</label>
+                    <div style="position:relative;">
+                        <input type="text" id="resident-mail-recipient-search" class="complaint-field" autocomplete="off" placeholder="Search staff or office by name..." required />
+                        <div id="resident-mail-recipient-results" class="compose-recipient-results"></div>
+                    </div>
+                    <input type="hidden" id="resident-mail-recipient-id" />
+                    <input type="hidden" id="resident-mail-recipient-type" value="staff" />
+                </div>
+                <div class="complaint-field-group">
+                    <label for="resident-mail-input-subject">Subject</label>
+                    <input type="text" id="resident-mail-input-subject" class="complaint-field" placeholder="Subject" />
+                </div>
+                <div class="complaint-field-group">
+                    <label for="resident-mail-input-body">Message Body</label>
+                    <textarea id="resident-mail-input-body" class="complaint-field" placeholder="Type your message..." required></textarea>
+                </div>
+                <div class="complaint-actions">
+                    <button type="button" class="complaint-btn cancel" onclick="closeComposeMail()">Cancel</button>
+                    <button type="submit" class="complaint-btn submit">Send Message</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script src="api-client.js"></script>
-    <script src="assets/js/Resident.js?v=7"></script>
+    <script src="assets/js/Resident.js?v=8"></script>
 </body>
 </html>

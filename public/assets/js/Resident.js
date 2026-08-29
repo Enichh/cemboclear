@@ -51,9 +51,11 @@ function showSuccess(message) {
 
 // Current authenticated resident user cache
 let currentUser = null;
-let currentAgencyId = 1;
+let currentAgencyId = null;
 let selectedAppointmentSlot = null;
 let cachedResidentMail = [];
+let currentResidentMail = null;
+let composeRecipientTimer = null;
 
 // Panel & View helpers
 function openUserAccountPanel() {
@@ -826,15 +828,18 @@ async function loadAvailableSlots() {
         }
 
         slotsContainer.innerHTML = slots.map(s => {
+            const isExpired = s.expired === true;
             const isAvail = s.available === true;
-            const statusLabel = isAvail ? 'Available' : 'Fully Booked';
-            const statusClass = isAvail ? 'color:#137333; font-weight:bold;' : 'color:#c5221f; font-weight:bold;';
+            const statusLabel = isExpired ? 'Time Passed' : (isAvail ? 'Available' : 'Fully Booked');
+            const statusClass = isExpired ? 'color:#888; font-weight:bold;' : (isAvail ? 'color:#137333; font-weight:bold;' : 'color:#c5221f; font-weight:bold;');
+            const disabled = !isAvail;
+            const bg = isExpired ? '#f3f4f6' : (isAvail ? '#fff' : '#f9f9f9');
 
             return `
-                <div class="time-slot" style="display:flex; justify-content:space-between; align-items:center; padding:12px 20px; border:1px solid #ddd; border-radius:10px; margin-bottom:8px; background:${isAvail ? '#fff' : '#f9f9f9'};">
+                <div class="time-slot" style="display:flex; justify-content:space-between; align-items:center; padding:12px 20px; border:1px solid #ddd; border-radius:10px; margin-bottom:8px; background:${bg}; ${isExpired ? 'opacity:0.65;' : ''}">
                     <div class="time-left" style="display:flex; align-items:center; gap:10px;">
-                        <input type="radio" name="time_slot_radio" value="${s.time_slot}" ${isAvail ? '' : 'disabled'} onchange="selectAppointmentSlot('${s.time_slot}')" />
-                        <span style="font-weight:600;">${s.time_slot}</span>
+                        <input type="radio" name="time_slot_radio" value="${s.time_slot}" ${disabled ? 'disabled' : ''} ${disabled ? '' : `onchange="selectAppointmentSlot('${s.time_slot}')"`} />
+                        <span style="font-weight:600;${isExpired ? ' text-decoration:line-through;' : ''}">${s.time_slot}</span>
                     </div>
                     <span style="${statusClass}">${statusLabel}</span>
                 </div>
@@ -991,6 +996,7 @@ async function loadResidentMail() {
 function selectResidentMail(id) {
     const mail = cachedResidentMail.find(m => m.id === id);
     if (!mail) return;
+    currentResidentMail = mail;
 
     const subjEl = document.getElementById('resident-mail-subject');
     const senderEl = document.getElementById('resident-mail-sender');
@@ -1012,6 +1018,168 @@ function selectResidentMail(id) {
             }
         };
     }
+}
+
+// -------------------------------------------------------------------------
+// Resident Mail — Compose & Reply
+// -------------------------------------------------------------------------
+
+function openComposeMail() {
+    const modal = document.getElementById('compose-mail-modal');
+    if (modal) modal.classList.add('open');
+}
+
+function closeComposeMail() {
+    const modal = document.getElementById('compose-mail-modal');
+    if (modal) modal.classList.remove('open');
+}
+
+function resetComposeMailForm() {
+    const form = document.getElementById('compose-mail-form');
+    if (form) form.reset();
+    const idEl = document.getElementById('resident-mail-recipient-id');
+    const typeEl = document.getElementById('resident-mail-recipient-type');
+    const resEl = document.getElementById('resident-mail-recipient-results');
+    if (idEl) idEl.value = '';
+    if (typeEl) typeEl.value = 'staff';
+    if (resEl) { resEl.classList.remove('show'); resEl.innerHTML = ''; }
+}
+
+// Debounced live recipient search, restricted to barangay staff for residents.
+function wireResidentRecipientSearch() {
+    const searchEl = document.getElementById('resident-mail-recipient-search');
+    const resEl = document.getElementById('resident-mail-recipient-results');
+    if (!searchEl || !resEl) return;
+
+    const show = function (html, keepOpen) {
+        resEl.innerHTML = html;
+        resEl.classList.toggle('show', !!keepOpen);
+    };
+
+    searchEl.addEventListener('input', function () {
+        clearTimeout(composeRecipientTimer);
+        const q = this.value.trim();
+        if (!q) {
+            show('', false);
+            const idEl = document.getElementById('resident-mail-recipient-id');
+            if (idEl) idEl.value = '';
+            return;
+        }
+        composeRecipientTimer = setTimeout(async () => {
+            try {
+                const res = await CemboClear.client().get('/mail/recipients/search?q=' + encodeURIComponent(q));
+                const recipients = (res && res.data) ? res.data : [];
+                if (recipients.length === 0) {
+                    show('<div class="compose-empty">No matching office or staff found.</div>', true);
+                    return;
+                }
+                show(recipients.map(r => {
+                    const safeName = String(r.name || '').replace(/\s+/g, ' ').trim();
+                    const sub = r.type === 'staff'
+                        ? (r.control_no || 'Barangay Staff')
+                        : (r.control_no ? 'Resident ' + r.control_no : 'Resident');
+                    return `<div class="compose-option" data-id="${r.id}" data-type="${r.type}" data-name="${safeName}">
+                        <div>
+                            <div class="compose-option-name">${safeName}</div>
+                            <div class="compose-option-sub">${sub}</div>
+                        </div>
+                    </div>`;
+                }).join(''), true);
+            } catch (err) {
+                show('<div class="compose-empty">Search failed. Try again.</div>', true);
+            }
+        }, 300);
+    });
+
+    resEl.addEventListener('click', function (e) {
+        const opt = e.target.closest('.compose-option');
+        if (!opt) return;
+        const idEl = document.getElementById('resident-mail-recipient-id');
+        const typeEl = document.getElementById('resident-mail-recipient-type');
+        if (idEl) idEl.value = opt.getAttribute('data-id');
+        if (typeEl) typeEl.value = opt.getAttribute('data-type');
+        searchEl.value = opt.getAttribute('data-name');
+        show('', false);
+    });
+
+    document.addEventListener('click', function (e) {
+        if (!searchEl.contains(e.target) && !resEl.contains(e.target)) {
+            show('', false);
+        }
+    });
+}
+
+async function sendResidentMail(event) {
+    event.preventDefault();
+    const idEl = document.getElementById('resident-mail-recipient-id');
+    const typeEl = document.getElementById('resident-mail-recipient-type');
+    const subjEl = document.getElementById('resident-mail-input-subject');
+    const bodyEl = document.getElementById('resident-mail-input-body');
+
+    const recipientId = idEl ? idEl.value : '';
+    const recipientType = typeEl ? typeEl.value : 'staff';
+    const subject = subjEl ? subjEl.value.trim() : '';
+    const body = bodyEl ? bodyEl.value.trim() : '';
+
+    if (!recipientId) {
+        showError('Please select a recipient from the search results.');
+        return;
+    }
+    if (!subject && !body) {
+        showError('Please enter a subject or message body.');
+        return;
+    }
+
+    try {
+        await CemboClear.client().post('/mail', {
+            recipient_id: parseInt(recipientId, 10),
+            recipient_type: recipientType,
+            subject: subject,
+            body: body
+        });
+        showSuccess('Message sent successfully.');
+        closeComposeMail();
+        resetComposeMailForm();
+        await loadResidentMail();
+    } catch (err) {
+        showError(err.message || 'Failed to send message');
+    }
+}
+
+// Pre-fill the compose modal to reply to the selected message's sender.
+function replyToResidentMail() {
+    if (!currentResidentMail) {
+        showError('Select a message to reply to first.');
+        return;
+    }
+
+    let recipientId = null;
+    let recipientType = null;
+    if (currentResidentMail.sender_staff_id) {
+        recipientId = currentResidentMail.sender_staff_id;
+        recipientType = 'staff';
+    } else if (currentResidentMail.sender_resident_id) {
+        recipientId = currentResidentMail.sender_resident_id;
+        recipientType = 'resident';
+    }
+    if (!recipientId) {
+        showError('Cannot reply: unknown sender.');
+        return;
+    }
+
+    const searchEl = document.getElementById('resident-mail-recipient-search');
+    const idEl = document.getElementById('resident-mail-recipient-id');
+    const typeEl = document.getElementById('resident-mail-recipient-type');
+    const subjEl = document.getElementById('resident-mail-input-subject');
+    const bodyEl = document.getElementById('resident-mail-input-body');
+
+    if (searchEl) searchEl.value = currentResidentMail.sender_name || ('Recipient #' + recipientId);
+    if (idEl) idEl.value = recipientId;
+    if (typeEl) typeEl.value = recipientType;
+    if (subjEl) subjEl.value = (currentResidentMail.subject ? 'Re: ' : '') + (currentResidentMail.subject || '');
+    if (bodyEl) bodyEl.value = '';
+
+    openComposeMail();
 }
 
 async function loadResidentNotifications() {
@@ -1180,6 +1348,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     await loadAvailableSlots();
     await loadMyAppointments();
     await loadMyTransactions();
+    wireResidentRecipientSearch();
     await loadResidentMail();
     await loadResidentNotifications();
 });

@@ -25,16 +25,30 @@ class ResidentRegistryReadController
         $limit = min(100, max(1, (int)($_GET['limit'] ?? 25)));
         $offset = ($page - 1) * $limit;
 
-        $total = $this->db->query('SELECT COUNT(*) as cnt FROM residents')->fetch()['cnt'];
+        // Optional status filter (pending / verified / outdated)
+        $status = trim((string)($_GET['status'] ?? ''));
+        $allowedStatuses = ['pending', 'verified', 'outdated'];
+        $statusClause = '';
+        $statusValue = null;
+        if ($status !== '' && in_array($status, $allowedStatuses, true)) {
+            $statusClause = 'WHERE registry_status = ?';
+            $statusValue = $status;
+        }
+
+        $sql = 'SELECT COUNT(*) as cnt FROM residents ' . $statusClause;
+        $total = $statusValue !== null
+            ? $this->db->query($sql, [$statusValue])->fetch()['cnt']
+            : $this->db->query($sql)->fetch()['cnt'];
 
         $residents = $this->db->query(
             'SELECT id, email, first_name, middle_name, last_name, suffix, phone,
                     gender, birthdate, civil_status, address, purok, control_no,
                     registry_status, account_status, created_at
              FROM residents
+             ' . $statusClause . '
              ORDER BY last_name, first_name
              LIMIT ? OFFSET ?',
-            [$limit, $offset]
+            $statusValue !== null ? [$statusValue, $limit, $offset] : [$limit, $offset]
         )->fetchAll();
 
         foreach ($residents as &$r) {
@@ -69,6 +83,17 @@ class ResidentRegistryReadController
 
         $resident['id'] = (int)$resident['id'];
 
+        // Surface the resident's uploaded attachments (e.g. signature, valid ID)
+        // so the admin can review identity before verifying.
+        $attachments = $this->db->query(
+            'SELECT id, kind, file_name FROM attachments WHERE resident_id = ? ORDER BY created_at DESC',
+            [(int)$id]
+        )->fetchAll();
+        foreach ($attachments as &$a) {
+            $a['id'] = (int)$a['id'];
+        }
+        $resident['attachments'] = $attachments;
+
         Response::json($resident);
     }
 
@@ -84,7 +109,8 @@ class ResidentRegistryReadController
 
         $like = "%{$q}%";
         $residents = $this->db->query(
-            'SELECT id, first_name, middle_name, last_name, gender, address, control_no, phone, registry_status
+            'SELECT id, first_name, middle_name, last_name, gender, address, control_no, phone, registry_status,
+                    last_census_at, created_at, updated_at
              FROM residents
              WHERE first_name LIKE ? OR last_name LIKE ? OR control_no LIKE ? OR phone LIKE ?
              ORDER BY last_name, first_name

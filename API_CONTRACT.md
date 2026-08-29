@@ -166,7 +166,7 @@ Every response is JSON.
 
 #### `GET /api/residents`
 - **Auth:** staff only.
-- **Query:** `page` (default 1, min 1), `limit` (default 25, max 100).
+- **Query:** `page` (default 1, min 1), `limit` (default 25, max 100), `status` (optional: `pending`, `verified`, or `outdated`; filters by `registry_status`).
 - **Response (200):**
 ```json
 {
@@ -179,13 +179,18 @@ Every response is JSON.
 
 #### `GET /api/residents/{id}`
 - **Auth:** any authenticated.
-- **Response (200):** full resident row (include `birth_place`, `citizenship`, `last_census_at`, `updated_at`). `404` if missing.
+- **Response (200):** full resident row (include `birth_place`, `citizenship`, `last_census_at`, `updated_at`), plus `attachments` — array of the resident's uploaded files `{ id, kind, file_name }` (kind: `signature` | `valid_id` | `supporting_document`). `404` if missing.
+
+#### `GET /api/attachments/{id}`
+- **Auth:** staff (any attachment) or the owning resident / their request owner.
+- **Query:** `?inline=1` serves image attachments with their real MIME type and `Content-Disposition: inline` so they render in an `<img>` tag. Without it, the file is force-downloaded as `application/octet-stream`.
+- **404** if the attachment, its file, or ownership is missing/mismatched.
 
 #### `GET /api/residents/search?q=...`
 - **Auth:** staff only.
 - **Query:** `q` (required; empty → `422`).
 - **Searches:** first_name, last_name, control_no, phone (LIKE).
-- **Response (200):** `{ "data": [ ... ] }`
+- **Response (200):** `{ "data": [ ... ] }`. Each item includes name fields, `control_no`, `registry_status`, and freshness fields `last_census_at`, `created_at`, `updated_at` (used by the Data Freshness Audit).
 
 #### `PUT /api/residents/{id}`
 - **Auth:** staff only.
@@ -278,12 +283,18 @@ Every response is JSON.
     ```json
     { "data": [ { "id":1, "ticket_id":"..", "subject":"..", "status":"..", "created_at":"..", "agency_name":".." } ] }
     ```
-  - staff (join residents + agencies; include resident name + control_no):
+  - staff (join residents + agencies + request_types; include resident name + control_no + details + request_type):
     ```json
-    { "data": [ { "id":1, "ticket_id":"..", "resident_id":1, "resident_name":"Juan Dela Cruz", "control_no":"CC-2026-0101", "agency_name":"Environment & Sanitation", "subject":"..", "status":"pending_review", "created_at":".." } ] }
+    { "data": [ { "id":1, "ticket_id":"..", "resident_id":1, "resident_name":"Juan Dela Cruz", "control_no":"CC-2026-0101", "agency_name":"Environment & Sanitation", "request_type":"Drainage Clogging Issue", "subject":"..", "details":"..", "status":"pending_review", "created_at":".." } ] }
     ```
 
 > This powers the admin "Resident Collection Box" (request compilation) screen, so the staff branch MUST return all requests, not just the caller's.
+
+#### `PUT /api/requests/{id}/status`
+- **Auth:** staff only.
+- **Request body:** `{ "status": "..." }` — one of `pending_review`, `reviewed`, `resolved`, `closed`.
+- **Effect:** updates the request status and logs an activity entry.
+- **Response (200):** `{ "message": "Request status updated" }`; `404` if missing; `422` if invalid status.
 
 ---
 
@@ -429,8 +440,9 @@ Every response is JSON.
 
 #### `GET /api/mail`
 - **Auth:** any authenticated.
-- **Returns:** inbox messages where the current user is the recipient.
-- **Response (200):** `{ "data": [ { "id":1, "subject":"..", "body":"..", "is_read":0, "created_at":"..", "sender_first":"..", "sender_last":".." } ] }`
+- **Query:** `folder` = `inbox` (default) | `archived` — filters by `is_archived` for the current user's role as recipient.
+- **Returns:** messages where the current user is the recipient.
+- **Response (200):** `{ "data": [ { "id":1, "subject":"..", "body":"..", "is_read":0, "is_archived":0, "created_at":"..", "sender_name":"..", "sender_email":"..", "sender_staff_id":.., "sender_resident_id":.. } ] }`
 
 #### `POST /api/mail`
 - **Auth:** any authenticated.
@@ -443,8 +455,13 @@ Every response is JSON.
 - **Response (201):** `{ "message": "Message sent", "id": 1 }`
 
 #### `PUT /api/mail/{id}/read`
-- **Auth:** any authenticated.
+- **Auth:** any authenticated (must be the recipient).
 - **Response (200):** `{ "message": "Marked as read" }`
+
+#### `PUT /api/mail/{id}/archive`
+- **Auth:** any authenticated (must be the recipient).
+- **Request body:** `{ "archived": 1 }` (omit or `1` to archive; `0` to restore).
+- **Response (200):** `{ "message": "Message archived" | "Message restored" }`; `422` if `archived` not `0`/`1`.
 
 ---
 

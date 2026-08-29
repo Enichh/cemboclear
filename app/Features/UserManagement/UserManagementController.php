@@ -22,11 +22,35 @@ class UserManagementController
     {
         Auth::requireAdmin();
 
+        $page = max(1, (int)($_GET['page'] ?? 1));
+        $limit = min(100, max(1, (int)($_GET['limit'] ?? 25)));
+        $offset = ($page - 1) * $limit;
+
+        // Optional search filter (email / name / position / branch)
+        $q = trim((string)($_GET['q'] ?? ''));
+        $where = '';
+        $searchParams = [];
+        if ($q !== '') {
+            $like = "%{$q}%";
+            $where = 'WHERE first_name LIKE ? OR last_name LIKE ? OR email LIKE ?
+                     OR position LIKE ? OR branch LIKE ?
+                     OR CONCAT(first_name, \' \', last_name) LIKE ?';
+            $searchParams = [$like, $like, $like, $like, $like, $like];
+        }
+
+        $total = $this->db->query(
+            'SELECT COUNT(*) as cnt FROM staff ' . $where,
+            $searchParams
+        )->fetch()['cnt'];
+
         $staff = $this->db->query(
             'SELECT id, email, first_name, middle_name, last_name, position, branch,
                     phone, is_verified, status, created_at
              FROM staff
-             ORDER BY last_name, first_name'
+             ' . $where . '
+             ORDER BY last_name, first_name
+             LIMIT ? OFFSET ?',
+            array_merge($searchParams, [$limit, $offset])
         )->fetchAll();
 
         foreach ($staff as &$s) {
@@ -34,7 +58,12 @@ class UserManagementController
             $s['is_verified'] = (int)$s['is_verified'];
         }
 
-        Response::json(['data' => $staff]);
+        Response::json([
+            'data'  => $staff,
+            'total' => (int)$total,
+            'page'  => $page,
+            'limit' => $limit,
+        ]);
     }
 
     /** POST /api/staff — Create a new staff account (admin only) */

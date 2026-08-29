@@ -221,6 +221,17 @@
 
   global.CemboClear = {
     client: client,
-    ApiClient: ApiClient
+    ApiClient: ApiClient,
+
+    // Absolute URL to the API root (useful for building <img> src and similar
+    // non-fetch URLs that need the resolved /.../api base path).
+    apiBase: API_BASE,
+
+    // Build an absolute URL to a stored attachment. Use inline=1 to render
+    // image attachments directly in an <img src> tag.
+    attachmentUrl: function (attachmentId, opts) {
+      var q = opts && opts.inline ? '?inline=1' : '';
+      return API_BASE + '/attachments/' + Number(attachmentId) + q;
+    }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

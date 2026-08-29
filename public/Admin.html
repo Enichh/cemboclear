@@ -30,6 +30,62 @@
         </div>
     </div>
 
+    <!-- Review & Verify Resident Modal (shows uploaded signature / valid ID before confirming) -->
+    <div id="verify-resident-modal" class="fixed inset-0 z-[90] hidden items-center justify-center bg-slate-900/50 p-4">
+        <div class="w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-200">
+            <div class="flex items-center justify-between border-b border-gray-200 bg-slate-50 px-6 py-4">
+                <h3 class="text-lg font-bold text-gray-900">Review Before Verifying</h3>
+                <button onclick="closeVerifyModal()" class="text-gray-500 hover:text-gray-900 text-xl font-bold">&times;</button>
+            </div>
+            <div id="verify-resident-content" class="p-6 space-y-5 text-sm text-gray-700">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Review Certificate Application Modal (shows application details + resident signature/ID) -->
+    <div id="certificate-review-modal" class="fixed inset-0 z-[90] hidden items-center justify-center bg-slate-900/50 p-4">
+        <div class="w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-200">
+            <div class="flex items-center justify-between border-b border-gray-200 bg-slate-50 px-6 py-4">
+                <h3 class="text-lg font-bold text-gray-900">Review Certificate Application</h3>
+                <button onclick="closeCertificateModal()" class="text-gray-500 hover:text-gray-900 text-xl font-bold">&times;</button>
+            </div>
+            <div id="certificate-review-content" class="p-6 space-y-5 text-sm text-gray-700">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Central Confirmation Modal (reusable "Are you sure you want to do this?") -->
+    <div id="confirm-action-modal" class="fixed inset-0 z-[95] hidden items-center justify-center bg-slate-900/50 p-4">
+        <div class="w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-200">
+            <div class="flex items-center justify-between border-b border-gray-200 bg-slate-50 px-6 py-4">
+                <h3 id="confirm-action-title" class="text-lg font-bold text-gray-900">Are you sure?</h3>
+                <button onclick="closeConfirmModal()" class="text-gray-500 hover:text-gray-900 text-xl font-bold">&times;</button>
+            </div>
+            <div class="p-6 space-y-5">
+                <p id="confirm-action-message" class="text-sm text-gray-600">Are you sure you want to do this?</p>
+                <div class="flex justify-end gap-3">
+                    <button type="button" onclick="closeConfirmModal()" class="px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700">Cancel</button>
+                    <button id="confirm-action-btn" type="button" class="px-5 py-2 rounded-xl text-white text-sm font-bold shadow-md">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Request / Concern Detail Modal -->
+    <div id="request-detail-modal" class="fixed inset-0 z-[90] hidden items-center justify-center bg-slate-900/50 p-4">
+        <div class="w-full max-w-xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-200">
+            <div class="flex items-center justify-between border-b border-gray-200 bg-slate-50 px-6 py-4">
+                <h3 class="text-lg font-bold text-gray-900">Request &amp; Concern Details</h3>
+                <button onclick="closeRequestDetail()" class="text-gray-500 hover:text-gray-900 text-xl font-bold">&times;</button>
+            </div>
+            <div id="request-detail-content" class="p-6 text-sm text-gray-700">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+    </div>
+
     <!-- Create Transaction Modal -->
     <div id="add-transaction-modal" class="fixed inset-0 z-[80] hidden items-center justify-center bg-slate-900/50 p-4">
         <div class="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-200">
@@ -39,8 +95,12 @@
             </div>
             <form id="add-transaction-form" class="p-6 space-y-4">
                 <div>
-                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Resident ID</label>
-                    <input type="number" id="tx-resident-id" class="w-full border border-gray-300 rounded-xl p-3 text-sm focus:outline-none focus:border-blue-500" placeholder="e.g. 1" required />
+                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Resident</label>
+                    <div class="relative">
+                        <input type="text" id="tx-resident-search" autocomplete="off" class="w-full border border-gray-300 rounded-xl p-3 text-sm focus:outline-none focus:border-blue-500" placeholder="Search resident by name, ID, or control no..." required />
+                        <div id="tx-resident-results" class="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg hidden max-h-64 overflow-y-auto"></div>
+                    </div>
+                    <input type="hidden" id="tx-resident-id" />
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Description</label>
@@ -300,7 +360,6 @@
                     <div id="sidebar-group-security-items" class="ml-4 mt-1 space-y-1 hidden">
                         <button onclick="openSecuritySection('monitoring')" id="tab-btn-security-monitoring" class="w-full text-left sidebar-sub py-1.5 px-3 rounded-md text-gray-500 hover:text-gray-900 transition security-subtab">Security Monitoring Alert</button>
                         <button onclick="openSecuritySection('rbac')" id="tab-btn-security-rbac" class="w-full text-left sidebar-sub py-1.5 px-3 rounded-md text-gray-500 hover:text-gray-900 transition security-subtab">Role-Based Access Control</button>
-                        <button onclick="openSecuritySection('encryption')" id="tab-btn-security-encryption" class="w-full text-left sidebar-sub py-1.5 px-3 rounded-md text-gray-500 hover:text-gray-900 transition security-subtab">End-to-End Encryption</button>
                     </div>
                 </div>
                 <div>
@@ -484,6 +543,12 @@
                                     <input type="text" id="rbi-search-input" placeholder="Search by name, house number, or Control No..." class="border border-gray-300 p-3 pr-11 rounded-lg text-sm shadow-sm w-full focus:outline-none focus:border-blue-500">
                                     <span class="absolute inset-y-0 right-3 flex items-center text-gray-400"><i class="fas fa-search"></i></span>
                                 </div>
+                                <select id="rbi-status-filter" class="border border-gray-300 p-3 rounded-lg text-sm shadow-sm bg-white focus:outline-none focus:border-blue-500">
+                                    <option value="">All Statuses</option>
+                                    <option value="pending">Pending</option>
+                                    <option value="verified">Verified</option>
+                                    <option value="outdated">Outdated</option>
+                                </select>
                                 <button class="bg-blue-900 text-white px-5 py-3 rounded-lg text-sm font-bold shadow-sm">All Puroks</button>
                             </div>
                         </div>
@@ -517,8 +582,8 @@
                                 <p class="text-sm text-gray-500 mt-1">Keep resident records up to date and detect gaps that require action.</p>
                             </div>
                             <div class="flex items-center gap-3 w-full md:w-auto">
-                                <input type="text" placeholder="Enter Resident Name or ID" class="border border-gray-300 p-3 rounded-lg text-sm shadow-sm w-full md:w-96 focus:outline-none focus:border-blue-500">
-                                <button class="bg-black text-white px-5 py-3 rounded-lg text-sm font-bold shadow-sm">Retrieve Data</button>
+                                <input type="text" id="freshness-search-input" placeholder="Enter Resident Name or ID" class="border border-gray-300 p-3 rounded-lg text-sm shadow-sm w-full md:w-96 focus:outline-none focus:border-blue-500">
+                                <button id="freshness-search-btn" class="bg-black text-white px-5 py-3 rounded-lg text-sm font-bold shadow-sm">Retrieve Data</button>
                             </div>
                         </div>
 
@@ -534,7 +599,13 @@
                         </div>
 
                         <div class="bg-white border border-gray-300 rounded-3xl shadow-sm overflow-hidden p-6 text-sm text-gray-600">
-                            Data Freshness audit logs are updated dynamically on census verification.
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="font-semibold text-gray-800">Resident Freshness Audit</div>
+                                <span id="freshness-result-count" class="text-xs text-gray-400"></span>
+                            </div>
+                            <div id="freshness-audit-results" class="space-y-3">
+                                Data Freshness audit logs are updated dynamically on census verification.
+                            </div>
                         </div>
                     </section>
 
@@ -627,13 +698,16 @@
                     </div>
 
                     <div class="flex flex-wrap items-center gap-3 mb-6">
-                        <button class="px-4 py-2 border border-gray-300 rounded-full text-sm font-medium bg-white">Archive</button>
-                        <select class="px-4 py-2 border border-gray-300 rounded-full text-sm bg-white"><option>None</option></select>
+                        <select id="mail-folder-select" class="px-4 py-2 border border-gray-300 rounded-full text-sm bg-white focus:outline-none focus:border-blue-500">
+                            <option value="inbox">Inbox</option>
+                            <option value="archived">Archived</option>
+                        </select>
+                        <button id="mail-archive-btn" class="px-4 py-2 border border-gray-300 rounded-full text-sm font-medium bg-white hover:bg-gray-50">Archive</button>
                         <div class="flex-1 min-w-[260px]"></div>
                         <div class="flex items-center gap-2">
                             <div class="flex items-center gap-2 border border-gray-300 rounded-full bg-white px-3 py-2 min-w-[280px]">
                                 <i class="fas fa-search text-gray-400"></i>
-                                <input type="text" placeholder="Search mail" class="w-full outline-none text-sm" />
+                                <input type="text" id="mail-search-input" placeholder="Search mail" class="w-full outline-none text-sm" />
                             </div>
                         </div>
                     </div>
@@ -653,7 +727,7 @@
                                     <div id="mail-sender" class="text-sm text-gray-500 mt-1">From --</div>
                                 </div>
                                 <div class="flex items-center gap-2">
-                                    <button class="px-3 py-2 rounded-full border border-gray-300 text-sm font-medium text-gray-700">Reply</button>
+                                    <button onclick="replyToMail()" class="px-3 py-2 rounded-full border border-gray-300 text-sm font-medium text-gray-700">Reply</button>
                                 </div>
                             </div>
 
@@ -705,6 +779,9 @@
                                             </tbody>
                                         </table>
                                     </div>
+                                    <div id="audit-logs-pagination" class="flex items-center justify-center gap-2 py-4">
+                                        <!-- Populated dynamically -->
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -717,19 +794,16 @@
                                 <div class="rbac-card rbac-accent-blue p-6 flex-1">
                                     <div class="flex items-center justify-between mb-4"><div class="text-lg font-bold text-gray-900 flex items-center gap-2"><i class="fas fa-users text-blue-800"></i> User Access Management</div></div>
                                     <div class="text-sm text-gray-500 mb-6"><ul class="space-y-2"><li>✓ Create User Accounts</li><li>✓ Assign User Roles</li><li>✓ Modify Permissions</li><li>✓ Deactivate Accounts</li><li>✓ Reset User Credentials</li></ul></div>
-                                    <div class="mt-auto pt-4"><button class="w-full py-3 bg-white border border-gray-300 rounded-lg font-semibold">View</button></div>
                                 </div>
 
                                 <div class="rbac-card rbac-accent-red p-6 flex-1">
                                     <div class="flex items-center justify-between mb-4"><div class="text-lg font-bold text-gray-900 flex items-center gap-2"><i class="fas fa-clipboard text-red-700"></i> Access Monitoring</div></div>
                                     <div class="text-sm text-gray-500 mb-6"><ul class="space-y-2"><li>✓ View Assigned Staff Access</li><li>✓ Monitor Medical Request Handling</li><li>✓ Track Health Record Access</li><li>✓ Review Service Activity Logs</li><li>✓ Audit Request Processing</li></ul></div>
-                                    <div class="mt-auto pt-4"><button class="w-full py-3 bg-white border border-gray-300 rounded-lg font-semibold">View</button></div>
                                 </div>
 
                                 <div class="rbac-card rbac-accent-yellow p-6 flex-1">
                                     <div class="flex items-center justify-between mb-4"><div class="text-lg font-bold text-gray-900 flex items-center gap-2"><i class="fas fa-shield text-yellow-600"></i> Permission Control</div></div>
                                     <div class="text-sm text-gray-500 mb-6"><ul class="space-y-2"><li>✓ Grant Department Permissions</li><li>✓ Restrict Sensitive Records</li><li>✓ Configure Access Levels</li><li>✓ Manage Request Visibility</li><li>✓ Approve Role Changes</li></ul></div>
-                                    <div class="mt-auto pt-4"><button class="w-full py-3 bg-white border border-gray-300 rounded-lg font-semibold">View</button></div>
                                 </div>
                             </div>
 
@@ -739,7 +813,13 @@
                                         <h4 class="text-lg font-bold text-gray-900">Staff Accounts</h4>
                                         <p class="text-sm text-gray-500 mt-1">Manage staff accounts, roles, and active status.</p>
                                     </div>
-                                    <button onclick="openCreateStaffModal()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-blue-700 flex items-center gap-2"><i class="fas fa-plus"></i> New Staff</button>
+                                    <div class="flex flex-col sm:flex-row items-center gap-3">
+                                        <div class="relative w-full sm:w-72">
+                                            <input type="text" id="staff-search-input" placeholder="Search by name, email, or position..." class="border border-gray-300 p-3 pr-10 rounded-lg text-sm shadow-sm w-full focus:outline-none focus:border-blue-500">
+                                            <span class="absolute inset-y-0 right-3 flex items-center text-gray-400"><i class="fas fa-search"></i></span>
+                                        </div>
+                                        <button onclick="openCreateStaffModal()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-blue-700 flex items-center gap-2"><i class="fas fa-plus"></i> New Staff</button>
+                                    </div>
                                 </div>
                                 <div class="p-6 overflow-x-auto">
                                     <table class="w-full text-left border-collapse">
@@ -757,24 +837,10 @@
                                             <tr><td colspan="6" class="p-4 text-center text-gray-500">Loading staff…</td></tr>
                                         </tbody>
                                     </table>
+                                    <div id="staff-pagination" class="flex items-center justify-center gap-2 py-4">
+                                        <!-- Populated dynamically -->
+                                    </div>
                                 </div>
-                            </div>
-                        </div>
-
-                        <div id="view-security-encryption" class="security-subview hidden">
-                            <div class="encryption-card">
-                                <div class="encryption-lock">
-                                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M12 1C9.23858 1 7 3.23858 7 6V9H6C5.44772 9 5 9.44772 5 10V20C5 20.5523 5.44772 21 6 21H18C18.5523 21 19 20.5523 19 20V10C19 9.44772 18.5523 9 18 9H17V6C17 3.23858 14.7614 1 12 1Z" stroke="#ffffff" stroke-width="0" fill="#ffffff" />
-                                        <path d="M12 13.5C12.8284 13.5 13.5 12.8284 13.5 12C13.5 11.1716 12.8284 10.5 12 10.5C11.1716 10.5 10.5 11.1716 10.5 12C10.5 12.8284 11.1716 13.5 12 13.5Z" fill="#0447a6"/>
-                                    </svg>
-                                </div>
-
-                                <div class="encryption-title">End-to-End Encryption</div>
-                                <div class="note-box"><strong>Note:</strong> Create a unique E2E Passcode for the resident. The document will be encrypted immediately and can ONLY be opened using this key.</div>
-                                <div class="mb-4"><input class="input-rounded" placeholder="Control Encryption (e.g. example CEMBO X44-99)" /></div>
-                                <div class="mb-2 relative"><input type="password" class="input-rounded" placeholder="Encryption Passcode" /><div style="position:absolute; right:10px; top:10px; font-size:12px;"><a href="#" class="text-gray-700">Forgot Passcode</a></div></div>
-                                <div class="flex justify-center mt-8"><button class="encrypt-btn">Encrypt</button></div>
                             </div>
                         </div>
                     </div>

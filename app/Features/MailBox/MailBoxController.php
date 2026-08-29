@@ -16,7 +16,7 @@ class MailBoxController
         $this->db = new Database();
     }
 
-    /** GET /api/mail — Inbox for current user */
+    /** GET /api/mail — Inbox for current user (folder: inbox | archived) */
     public function index(): void
     {
         Auth::requireRole();
@@ -24,28 +24,31 @@ class MailBoxController
         $id = Auth::id();
         $type = Auth::type();
 
+        $folder = trim((string)($_GET['folder'] ?? 'inbox'));
+        $archivedClause = $folder === 'archived' ? 'm.is_archived = 1' : 'm.is_archived = 0';
+
+        $baseSelect =
+            'SELECT m.id, m.subject, m.body, m.is_read, m.is_archived, m.created_at,
+                    m.sender_staff_id, m.sender_resident_id,
+                    COALESCE(
+                        NULLIF(CONCAT_WS(\' \', s.first_name, s.last_name), \'\'),
+                        NULLIF(CONCAT_WS(\' \', r.first_name, r.last_name), \'\'),
+                        \'Staff\'
+                    ) AS sender_name,
+                    COALESCE(s.email, r.email) AS sender_email
+             FROM mail m
+             LEFT JOIN staff s ON s.id = m.sender_staff_id
+             LEFT JOIN residents r ON r.id = m.sender_resident_id
+             WHERE ';
+
         if ($type === 'staff') {
             $messages = $this->db->query(
-                'SELECT m.id, m.subject, m.body, m.is_read, m.created_at,
-                        COALESCE(s.first_name, r.first_name) as sender_first,
-                        COALESCE(s.last_name, r.last_name) as sender_last
-                 FROM mail m
-                 LEFT JOIN staff s ON s.id = m.sender_staff_id
-                 LEFT JOIN residents r ON r.id = m.sender_resident_id
-                 WHERE m.recipient_staff_id = ?
-                 ORDER BY m.created_at DESC',
+                $baseSelect . 'm.recipient_staff_id = ? AND ' . $archivedClause . ' ORDER BY m.created_at DESC',
                 [$id]
             )->fetchAll();
         } else {
             $messages = $this->db->query(
-                'SELECT m.id, m.subject, m.body, m.is_read, m.created_at,
-                        COALESCE(s.first_name, r.first_name) as sender_first,
-                        COALESCE(s.last_name, r.last_name) as sender_last
-                 FROM mail m
-                 LEFT JOIN staff s ON s.id = m.sender_staff_id
-                 LEFT JOIN residents r ON r.id = m.sender_resident_id
-                 WHERE m.recipient_resident_id = ?
-                 ORDER BY m.created_at DESC',
+                $baseSelect . 'm.recipient_resident_id = ? AND ' . $archivedClause . ' ORDER BY m.created_at DESC',
                 [$id]
             )->fetchAll();
         }
@@ -53,6 +56,9 @@ class MailBoxController
         foreach ($messages as &$msg) {
             $msg['id'] = (int)$msg['id'];
             $msg['is_read'] = (int)$msg['is_read'];
+            $msg['is_archived'] = (int)($msg['is_archived'] ?? 0);
+            $msg['sender_staff_id'] = $msg['sender_staff_id'] !== null ? (int)$msg['sender_staff_id'] : null;
+            $msg['sender_resident_id'] = $msg['sender_resident_id'] !== null ? (int)$msg['sender_resident_id'] : null;
         }
 
         Response::json(['data' => $messages]);
@@ -134,13 +140,48 @@ class MailBoxController
         Response::json(['message' => 'Marked as read']);
     }
 
+    /** PUT /api/mail/{id}/archive — Archive (or un-archive) a received message */
+    public function archive(string $id): void
+    {
+        Auth::requireRole();
+
+        $userId = Auth::id();
+        $userType = Auth::type();
+        $mailId = (int)$id;
+
+        $input = json_decode(file_get_contents('php://input'), true) ?? [];
+        $archived = array_key_exists('archived', $input) ? (int)$input['archived'] : 1;
+        if ($archived !== 0 && $archived !== 1) {
+            Response::error('archived must be 0 or 1.', 422);
+        }
+
+        $recipientColumn = ($userType === 'staff') ? 'recipient_staff_id' : 'recipient_resident_id';
+
+        $existing = $this->db->query(
+            "SELECT id FROM mail WHERE id = ? AND {$recipientColumn} = ?",
+            [$mailId, $userId]
+        )->fetch();
+
+        if (!$existing) {
+            Response::notFound('Mail not found');
+        }
+
+        $this->db->execute(
+            "UPDATE mail SET is_archived = ? WHERE id = ? AND {$recipientColumn} = ?",
+            [$archived, $mailId, $userId]
+        );
+
+        Response::json(['message' => $archived ? 'Message archived' : 'Message restored']);
+    }
+
     /**
-     * GET /api/mail/recipients/search?q=... — Search possible mail recipients by name
-     * (staff only). Returns a unified list of residents and staff.
+     * GET /api/mail/recipients/search?q=... — Search possible mail recipients by name.
+     * Staff can message anyone (residents + staff). Residents message only barangay
+     * staff/offices, so their search results are scoped to staff.
      */
     public function searchRecipients(): void
     {
-        Auth::requireRole('staff');
+        Auth::requireRole();
 
         $q = trim($_GET['q'] ?? '');
         if ($q === '') {
@@ -150,7 +191,10 @@ class MailBoxController
 
         $like = "%{$q}%";
 
-        $residents = $this->db->query(
+        // Residents may only message staff/offices, not other residents.
+        $isResident = Auth::type() === 'resident';
+
+        $residents = $isResident ? [] : $this->db->query(
             "SELECT id, first_name, middle_name, last_name, control_no
              FROM residents
              WHERE first_name LIKE ? OR last_name LIKE ? OR CONCAT(first_name, ' ', last_name) LIKE ? OR control_no LIKE ?

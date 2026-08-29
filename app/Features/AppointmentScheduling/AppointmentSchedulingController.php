@@ -26,11 +26,23 @@ class AppointmentSchedulingController
             Response::error('Valid date parameter is required (YYYY-MM-DD).', 422);
         }
 
-        // All possible time slots
+        // All possible time slots, keyed by start hour for elapsed-time checks.
+        // 12:00 shifts to hour 12 so it sorts after 11:00 and before 13:00.
         $allSlots = [
-            '8:00 - 9:00', '9:00 - 10:00', '10:00 - 11:00', '11:00 - 12:00',
-            '1:00 - 2:00', '2:00 - 3:00', '3:00 - 4:00', '4:00 - 5:00',
+            '8:00 - 9:00'     => 8,
+            '9:00 - 10:00'    => 9,
+            '10:00 - 11:00'   => 10,
+            '11:00 - 12:00'   => 11,
+            '1:00 - 2:00'     => 13,
+            '2:00 - 3:00'     => 14,
+            '3:00 - 4:00'     => 15,
+            '4:00 - 5:00'     => 16,
         ];
+
+        // Authority for "today" and "current hour": always Asia/Manila (UTC+8),
+        // regardless of the server's local timezone. All slot comparisons must
+        // use this single source of truth so resident-facing times stay correct.
+        $now = new \DateTimeImmutable('now', new \DateTimeZone('Asia/Manila'));
 
         // Booked slots for the date
         $booked = $this->db->query(
@@ -38,11 +50,19 @@ class AppointmentSchedulingController
             [$date]
         )->fetchAll(\PDO::FETCH_COLUMN);
 
+        // A slot that already started (or passed) for the selected date is not
+        // bookable. Compare the slot's start hour against the current hour when
+        // the date being shown is today.
+        $isToday = ($date === $now->format('Y-m-d'));
+        $currentHour = (int)$now->format('H');
+
         $available = [];
-        foreach ($allSlots as $slot) {
+        foreach ($allSlots as $slot => $startHour) {
+            $alreadyStarted = $isToday && $currentHour >= $startHour;
             $available[] = [
                 'time_slot' => $slot,
-                'available' => !in_array($slot, $booked, true),
+                'available' => !in_array($slot, $booked, true) && !$alreadyStarted,
+                'expired'   => (bool)$alreadyStarted,
             ];
         }
 
@@ -65,6 +85,22 @@ class AppointmentSchedulingController
         $this->db->beginTransaction();
 
         try {
+            // Authority for "today" and "current hour": always Asia/Manila (UTC+8).
+            $now = new \DateTimeImmutable('now', new \DateTimeZone('Asia/Manila'));
+
+            // Reject bookings for time slots that have already started today
+            $slotStartHours = [
+                '8:00 - 9:00' => 8, '9:00 - 10:00' => 9, '10:00 - 11:00' => 10, '11:00 - 12:00' => 11,
+                '1:00 - 2:00' => 13, '2:00 - 3:00' => 14, '3:00 - 4:00' => 15, '4:00 - 5:00' => 16,
+            ];
+            if ($date === $now->format('Y-m-d')) {
+                $startHour = $slotStartHours[$timeSlot] ?? null;
+                if ($startHour !== null && (int)$now->format('H') >= $startHour) {
+                    $this->db->rollBack();
+                    Response::error('This time slot has already started and can no longer be booked.', 422);
+                }
+            }
+
             // Lock the slot to prevent double-booking
             $existing = $this->db->query(
                 "SELECT id FROM appointments

@@ -38,20 +38,20 @@ class SignupValidator
             $errors[] = 'Last name contains invalid characters.';
         }
 
-        // 3. Middle Name (optional)
-        if (!empty($input['middle_name'])) {
-            $middleName = trim((string)$input['middle_name']);
-            if (mb_strlen($middleName) > 50) {
-                $errors[] = 'Middle name must not exceed 50 characters.';
-            } elseif (!preg_match("/^[a-zA-Z\s\-\'\.]+$/u", $middleName)) {
-                $errors[] = 'Middle name contains invalid characters.';
+        // 3. Middle Name (optional) — a single middle initial, e.g. "M" or "M."
+        $middleName = trim((string)($input['middle_name'] ?? ''));
+        if ($middleName !== '') {
+            if (!preg_match("/^[a-zA-Z]\.?$/u", $middleName)) {
+                $errors[] = 'Middle initial must be a single letter (e.g. M or M.).';
             }
         }
 
         // 4. Email
-        $email = trim((string)($input['email'] ?? ''));
+        $email = strtolower(trim((string)($input['email'] ?? '')));
         if ($email === '') {
             $errors[] = 'Email address is required.';
+        } elseif (mb_strlen($email) > 255) {
+            $errors[] = 'Email address must not exceed 255 characters.';
         } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $errors[] = 'Please enter a valid email address.';
         }
@@ -76,6 +76,8 @@ class SignupValidator
                 $now = new \DateTime('today');
                 if ($d > $now) {
                     $errors[] = 'Birthdate cannot be in the future.';
+                } elseif ($d < new \DateTime('1900-01-01')) {
+                    $errors[] = 'Birthdate looks unreasonably old (must be on or after 1900).';
                 }
             }
         }
@@ -92,6 +94,11 @@ class SignupValidator
         $password = (string)($input['password'] ?? '');
         if ($password === '') {
             $errors[] = 'Password is required.';
+        } elseif (strlen($password) > 72) {
+            // PHP's default bcrypt (PASSWORD_DEFAULT) truncates at 72 BYTES.
+            // Silently truncating creates a serious bug where two different long
+            // passwords hash identically, so we reject over-length passwords.
+            $errors[] = 'Password must not exceed 72 characters.';
         } else {
             if (mb_strlen($password) < 8) {
                 $errors[] = 'Password must be at least 8 characters long.';
